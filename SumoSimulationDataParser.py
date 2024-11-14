@@ -6,43 +6,48 @@ pedestian position data from a csv generated from a --netstate-dump call
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
+import matplotlib.pyplot as plt
 import math
 import argparse
 
-# Earth's radius in meters at Raleigh's Latitude
-R = 6370864.372670844
-
-# Offset Points in (x, y)
-offset_xy = [879.857, 721.028]
-
-# Origin Points in Lat/Lon - Minimum
-offset_geo = [35.77838212885381, -78.63627259611494]
-oLat = 35.7734
-oLon = -78.6443
-
-def latLon2Cartesian(lat, lon, offset, r):
-    return [2 * r * math.sin((lat - offset[0]) * math.pi / 360), 
-            2 * r * math.sin((lon - offset[1]) * math.pi / 360)]
+def latLon2Cartesian(lat, lon, bbox, r):
+    centerLat = (bbox[0][0] + bbox[0][1]) / 2
+    centerLon = (bbox[1][0] + bbox[1][1]) / 2
+    return [2 * r * math.sin((lat - centerLat) * math.pi / 360), 
+            2 * r * math.sin((lon - centerLon) * math.pi / 360)]
 
 def parse():
     parser = argparse.ArgumentParser("simulation_data_parser")
-    parser.add_argument("simulation_data_path", help="Input the absolute path to a CSV file of simulated SUMO data.")
+    parser.add_argument("parameter_file", help="Input the absolute path of a text file that contains:\n the desired radius (in meters) on the first line, the space-seperated min and max latitude on the second line, and the space-seperated min and max longitude on the third line.")
+    parser.add_argument("simulation_data_path", help="Input the path to a CSV file of simulated SUMO data.")
     parser.add_argument("vehicle_save_path", help="Input a file to save the vehicle data in.")
     parser.add_argument("person_save_path", help="Input a file to save the pedestrian data in.")
     args = parser.parse_args()
+
+    # Reading arguments
     df = pd.read_csv(args.simulation_data_path, delimiter=';')
     pd.set_option("display.max_columns", len(df.columns))
+
+    # Building Bounding box from data file
+    with open(args.parameter_file, "r") as file:
+        R = float(file.readline())
+        bbox = []
+        bbox.append([float(x) for x in file.readline().strip().split()])
+        bbox.append([float(x) for x in file.readline().strip().split()])
+
+    print(f'Using radius: {R} meters')
+    print(f'Using min lat {bbox[0][0]} and max lat {bbox[0][1]}')
+    print(f'Using min lon {bbox[1][0]} and max lon {bbox[1][1]}')
             
     bad_cols = ["vehicle_angle", 
-                        "vehicle_lane", 
-                        "vehicle_pos", 
-                        "vehicle_slope", 
-                        "person_angle",
-                        "person_edge", 
-                        "person_pos",
-                        "person_slope"]
+                "vehicle_lane", 
+                "vehicle_pos", 
+                "vehicle_slope", 
+                "person_angle",
+                "person_edge", 
+                "person_pos",
+                "person_slope"]
     
     # We keep time, id, type, speed, and lat lon position
     for col in bad_cols:
@@ -66,14 +71,14 @@ def parse():
     vehicle_df.reset_index(drop=True, inplace=True)
     person_df.reset_index(drop=True, inplace=True)
 
-    # Converting to local coords
+    # Converting to local coords, lat->y and lon->x
     m = len(person_df)
     x = np.full(shape=m, fill_value=0.0, dtype=np.float64)
     y = np.full(shape=m, fill_value=0.0, dtype=np.float64)
     for i in range(m):
-        res = latLon2Cartesian(person_df["person_y"].iloc[i], person_df["person_x"].iloc[i], offset_geo, R)
-        x[i] = res[0]
-        y[i] = res[1]
+        res = latLon2Cartesian(person_df["person_y"].iloc[i], person_df["person_x"].iloc[i], bbox, R)
+        x[i] = res[1]
+        y[i] = res[0]
     person_df.insert(0, "local_person_x", x)
     person_df.insert(0, "local_person_y", y)
 
@@ -81,9 +86,9 @@ def parse():
     x.resize(m)
     y.resize(m)
     for i in range(m):
-        res = latLon2Cartesian(vehicle_df["vehicle_y"].iloc[i], vehicle_df["vehicle_x"].iloc[i], offset_geo, R)
-        x[i] = res[0]
-        y[i] = res[1]
+        res = latLon2Cartesian(vehicle_df["vehicle_y"].iloc[i], vehicle_df["vehicle_x"].iloc[i], bbox, R)
+        x[i] = res[1]
+        y[i] = res[0]
     vehicle_df.insert(0, "local_vehicle_x", x)
     vehicle_df.insert(0, "local_vehicle_y", y)
     
@@ -95,6 +100,11 @@ def parse():
 
     """
     # Trying to print
+    for i in range(100):
+        person = person_df.loc[person_df["person_id"] == "ped" + str(i)]
+        plt.scatter(person["local_person_x"], person["local_person_y"], color="green")
+    plt.show()
+    
     person0 = person_df.loc[person_df["person_id"] == "ped0"]
     person1 = person_df.loc[person_df["person_id"] == "ped1"]
     person2 = person_df.loc[person_df["person_id"] == "ped2"]
@@ -121,8 +131,6 @@ def parse():
     plt.scatter(person11["local_person_x"], person11["local_person_y"], color="magenta")
     plt.show()
     """
-
-    print(person_df.head())
 
     # Saving Dataframes
     vehicle_df.to_csv(args.vehicle_save_path)
