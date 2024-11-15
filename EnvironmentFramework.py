@@ -14,6 +14,7 @@ import tensorflow as tf
 from sionna.rt import Antenna, AntennaArray
 from sionna.rt import Transmitter, Receiver
 
+# The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
 
 class Environment():
@@ -28,20 +29,19 @@ class Environment():
             time_step (float): the time step between simulation iterations
             ped_rx (bool): if the pedestrians are receivers and the UAVs are transmitters, default true
         """
-        self.step = 0
         print("Loading Scene")
         self.scene = sionna.rt.load_scene(scene_path)
         print("Parsing Positions")
         self.ped_rx = ped_rx
-        self.gus = self.createGroundUsers(position_df_path)
         self.ped_df = self.parsePositions(position_df_path)
         self.time_step = time_step
         self.ped_height = ped_height
         self.n_rx = 0
         self.n_tx = 0
-        self.uavs = np.array([])
+        self.uavs = {}
+        self.gus = self.createGroundUsers(position_df_path)
 
-    
+
     def createGroundUsers(self, position_df_path):
         """
         Parses the positions data from SUMO and creates a list of ground user objects
@@ -64,36 +64,23 @@ class Environment():
         # Creating the ground users
         rtn = []
         for i in range(len(res)):
-            rtn.append(GroundUser(i, res[i], height=1.5, com_type=("receiver" if self.ped_rx else "transmitter")))
             if self.ped_rx:
+                rtn.append(GroundUser(i, res[i], height=1.5, com_type="rx"))
                 self.n_rx += 1
             else:
+                rtn.append(GroundUser(i, res[i], height=1.5, com_type="tx"))
                 self.n_tx += 1
                 
-        self.step = 1
-        return np.array(rtn)        
+        return np.array(rtn)
     
 
     def advancePedestrianPositions(self):
         """
-        Advances the pedestrian positions to the next time step
+        Advances all the pedestrian positions to the next their next time step
         """
-        self.scene._receivers.clear()
-        if self.ped_rx:
-            for i in range(len(self.ped_df)):
-                self.scene.add(Receiver(name="ped" + str(i), 
-                                        position=[self.ped_df[i]["local_person_x"].iloc[0], self.ped_df[i]["local_person_y"].iloc[0], self.ped_height], 
-                                        color=np.random.rand(3)))
-                self.n_rx += 1
-        else:
-            self.scene._transmitters.clear()
-            for i in range(len(self.ped_df)):
-                self.scene.add(Transmitter(name="ped" + str(i), 
-                                        position=[self.ped_df[i]["local_person_x"].iloc[0], self.ped_df[i]["local_person_y"].iloc[0], self.ped_height], 
-                                        color=np.random.rand(3)))
-                self.n_tx += 1
-        
-        self.step += 1
+
+        for id in range(len(self.gus)):
+            self.updateGroundUser(id)
     
 
     def computeShortestDistance(self):
@@ -119,7 +106,8 @@ class Environment():
         Visualizes the current receivers and transmitters in the scene.
         """
         self.scene.preview(show_devices=True)
-    
+
+
     def computeLOSLoss(self):
         """
         Computes the Line-of-sight path loss across all pairs of transmitters and receivers
@@ -129,28 +117,84 @@ class Environment():
         """
         paths = self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
                                          reflection=False, diffraction=False, scattering=False, check_scene=False)
+
+        # Check the sampling frequency parameter for the doppler shift
+        if self.ped_rx:
+            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.uavs.keys()]), np.array([x.vel for x in self.gus]))
+        else:
+            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel for x in self.uavs.keys()]))
         
-        a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
+        a, tau = tf.squeeze(paths).cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         return -20 * np.log10(np.abs(a))
     
-    def addUAV(self, name, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3)):
+
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3)):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
         Args:
-            name (str): the unique name of the UAv
+            id (int): the unique id of the UAV
             mass (float): the mass of the UAV in kilograms
             efficiency (float): the proportion of the UAV's power consumption that is turned into movement
             pos (np.array(3,)): the initial position of the UAV
             vel (np.array(3,)): the initial velocity of the UAV2
             color (np.array(3,)): the color of the UAV used for visualization
         """
-        self.uavs.append(UAV(self.scene, name, mass, efficiency, pos, vel, self.time_step, color, self.ped_rx))
+        self.uavs[id] = UAV(id, mass, efficiency, pos, vel, self.time_step, color, self.ped_rx)
         if self.ped_rx:
+            self.scene.add(Transmitter(name=str(id), position=pos, color=color))
             self.n_tx += 1
         else:
+            self.scene.add(Receiver(name=str(id), position=pos, color=color))
             self.n_rx += 1
+
     
+    def impulseUAV(self, id, force, wind_vector=np.zeros(3,)):
+        """
+        Administers the desired impulse to the UAV with the specified id, and updates its receiver / transmitter position
+
+        Args:
+            id (int): the unique id number of the UAV
+            force (np.array(3,)): a vector of the force, in Newtons
+            wind_vector (np.array(3,)): a vector of the wind velocity, in m/s
+        """
+        self.uavs[id].impulse(force, wind_vector)
+        if self.ped_rx:
+            self.scene._transmitters[str(id)].position = self.uavs[id].pos
+        else:
+            self.scene._receivers[str(id)].position = self.uavs[id].pos
+    
+
+    def updateGroundUser(self, id):
+        """
+        Moves a ground user to the next avaliable position and updates velocity
+        """
+        self.gus[id].update()
+        if self.ped_rx:
+            self.scene._receivers[str(id)].position = self.gus[id].pos
+        else:
+            self.scene._transmitters[str(id)].position = self.gus[id].pos
+    
+
+    def setTransmitterArray(self, arr):
+        """
+        Sets the scene's transmitter array to arr
+
+        Args:
+            arr the antenna array for the transmitters
+        """
+        self.scene.tx_array = arr
+
+    
+    def setReceiverArray(self, arr):
+        """
+        Sets the scene's receiver array to arr
+
+        Args:
+            arr the antenna array for the receivers
+        """
+        self.scene.rx_array = arr
+
 
     def plotUAVs(self, length=1):
         """
@@ -165,7 +209,7 @@ class Environment():
 
 
 class UAV():
-    def __init__(self, id, mass, efficiency, pos, vel, bandwidth, color=np.random.rand(3), com_type="transmitter"):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, color=np.random.rand(3), com_type="tx"):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -177,23 +221,20 @@ class UAV():
             vel (np.array(3,)): the initial velocity of the UAV
             bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
             color (np.array(3,)): the color of the UAV used for visualization
-            com_type (str): either "transmitter" or "receiver"
+            com_type (str): either "tx" for transmitter or "rx" for receiver
         """
         self.id = id
         self.mass = mass
         self.efficiency = efficiency
+        self.pos = pos
         self.vel = vel
+        self.delta_t = delta_t
         self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
         self.bandwidth = bandwidth
-        if com_type == "transmitter":
-            self.scene.add(Transmitter(name=str(id), position=pos, color=color))
-        elif com_type == "receiver":
-            self.scene.add(Receiver(name=str(id), position=pos, color=color))
-        else:
-            raise ValueError("Invalid com_type, should be 'transmitter' or 'receiver'")
+        self.com_type = com_type
     
 
-    def impulse(self, time_step, force, wind_vector=np.zeros(3)):
+    def impulse(self, force, wind_vector=np.zeros(3)):
         """
         Updates the UAV's position and velocity with a constant impulse over a time step
         Also updates the consumption with the new energy change
@@ -205,8 +246,8 @@ class UAV():
             wind_vector (np.array(3,)): the vector of the wind, each component in m/s
         """
 
-        v_f = force * time_step / self.mass + self.vel + wind_vector
-        x_f = (time_step * time_step / (2 * self.mass)) * force + self.vel * time_step + wind_vector * time_step
+        v_f = force * self.delta_t / self.mass + self.vel + wind_vector
+        x_f = (self.delta_t * self.delta_t / (2 * self.mass)) * force + self.vel * self.delta_t + wind_vector * self.delta_t
         delta_k_e = 1/2 * self.mass * np.dot(v_f - self.vel, v_f - self.vel)
         delta_p_e = self.mass * GRAVITATIONAL_ACCEL * (x_f[2] - self.pos[2])
         self.consumption += (delta_k_e + delta_p_e) / self.efficiency
@@ -269,7 +310,7 @@ class UAV():
     
 
 class GroundUser():
-    def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="transmitter", color=np.random.rand(3)):
+    def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.random.rand(3)):
         """
         Creates a new ground user with the specified parameters
 
@@ -284,18 +325,26 @@ class GroundUser():
 
         self.id = id
         self.positions = positions
-        self.velocity = intitial_velocity
-        self.step = 1
+        self.pos = self.positions[0]
+        self.vel = intitial_velocity
+        self.step = 0
         self.height = height
-        self.bandwidth
-        if com_type == "transmitter":
+        self.bandwidth = bandwidth
+        self.delta_t = delta_t
+        if com_type == "tx":
             self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1]])
-        elif com_type == "receiver":
+        elif com_type == "rx":
             self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1]])
         else:
-            raise ValueError("com_type must be one of 'transmitter', 'receiver'")
+            raise ValueError("com_type must be either 'tx' or 'rx'")
+    
 
-
-
-        
-
+    def update(self):
+        """
+        Updates the Ground User's position to the next time step and updates velocity
+        """
+        self.step += 1
+        if self.step >= len(self.positions):
+            raise ValueError("No more positions to update for Ground User: " + self.id)
+        self.vel = (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
+        self.pos = self.positions[self.step]
