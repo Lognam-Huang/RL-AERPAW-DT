@@ -5,6 +5,8 @@ interfacing with Sionna methods.
 @author(s) Everett Tucker
 """
 
+#TODO: Look at AERPAW user manual to cross-reference ideas for this simulation framework
+
 import sionna
 import math
 import numpy as np
@@ -221,7 +223,7 @@ class UAV():
             vel (np.array(3,)): the initial velocity of the UAV
             bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
             color (np.array(3,)): the color of the UAV used for visualization
-            com_type (str): either "tx" for transmitter or "rx" for receiver
+            com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both
         """
         self.id = id
         self.mass = mass
@@ -233,7 +235,7 @@ class UAV():
         self.bandwidth = bandwidth
         self.com_type = com_type
     
-
+    # TODO: Fix this from using impulse to using the change in position and velocity
     def impulse(self, force, wind_vector=np.zeros(3)):
         """
         Updates the UAV's position and velocity with a constant impulse over a time step
@@ -324,6 +326,7 @@ class GroundUser():
         """
 
         self.id = id
+        # TODO: Check the time gap for the data from SUMO, and ensure that this time series is accurate
         self.positions = positions
         self.pos = self.positions[0]
         self.vel = intitial_velocity
@@ -331,6 +334,7 @@ class GroundUser():
         self.height = height
         self.bandwidth = bandwidth
         self.delta_t = delta_t
+        # TODO: Remove device this from the state
         if com_type == "tx":
             self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1]])
         elif com_type == "rx":
