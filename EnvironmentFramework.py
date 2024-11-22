@@ -288,18 +288,31 @@ class UAV():
         """
     
     # TODO: Deprecated
-    def move(self, vector):
+    def move(self, position, velocity):
         """
-        Moves the UAV according to a specified vector
-        
-        Args:
-            vector (np.array(3,)): the vector to move the UAV in
-        """
-        self.pos += vector
+        Moves the UAV from its current position and velocity to a new position and velocity over a single time step
+        Uses a cubic Bezier curve to interpolate the points to minimize the consumption
+        Updates the UAV's consumption with the work done by moving
 
+        Args:
+            position (np.array(3,)): the new position of the UAV
+            velocity (np.array(3,)): the new velocity of the UAV
         """
-        Update to include power consumption
-        """
+
+        # Array of paremters of the Bezier curve, dependent on time_step
+        X = np.linalg.inv(np.array([
+            [1, 0, 0, 0], 
+            [-3, 3, 0, 0], 
+            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
+            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
+        ]))
+
+        # Initial data matrix
+        f = np.array([self.pos, self.vel, position, velocity])
+
+        res = np.dot(X, f)
+
+        return res
 
     def getConsumption(self):
         """

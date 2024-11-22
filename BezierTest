@@ -1,0 +1,52 @@
+import numpy as np
+
+class Point():
+    def __init__(self, pos, vel, delta_t):
+        self.pos = pos
+        self.vel = vel
+        self.delta_t = delta_t
+
+    def move(self, position, velocity):
+        """
+        Moves the UAV from its current position and velocity to a new position and velocity over a single time step
+        Uses a cubic Bezier curve to interpolate the points to minimize the consumption
+        Updates the UAV's consumption with the work done by moving
+        TESTED Working!! 11-22
+
+        Args:
+            position (np.array(3,)): the new position of the UAV
+            velocity (np.array(3,)): the new velocity of the UAV
+        """
+
+        # Array of paremters of the Bezier curve, dependent on time_step
+        X = np.linalg.inv(np.array([
+            [1, 0, 0, 0], 
+            [-3, 3, 0, 0], 
+            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
+            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
+        ]))
+
+        # Initial data matrix
+        f = np.array([self.pos, self.vel, position, velocity])
+
+        res = np.dot(X, f)
+
+        return res
+    
+    def computeConsumption(self, bezier):
+        """
+        Computes the consumption from the array of cubic bezier parameters
+
+        Args:
+            bezier (np.array(4, 3)): an array of bezier parameters
+
+        Returns:
+            float: The work done by the UAV, in joules
+        """
+        pass
+    
+
+if __name__ == '__main__':
+    p = Point(np.array([1, 0.5, 2.1]), np.array([1, -1, 0.3]), 1)
+    print(p.move(position=np.array([-3, 2, 0]), velocity=np.array([-1, 1, 1])))
+
