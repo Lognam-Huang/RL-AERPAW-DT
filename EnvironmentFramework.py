@@ -379,6 +379,7 @@ class UAV():
             return rtn * self.mass / self.efficiency
 
 
+    # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
     def move(self, new_pos, new_vel):
         """
         Moves the UAV from its current position and velocity to a new position and velocity over a single time step
