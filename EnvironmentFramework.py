@@ -22,7 +22,7 @@ GRAVITATIONAL_ACCEL = 9.80665
 NUM_INTEGRATION_SAMPLES = 1000
 
 class Environment():
-    def __init__(self, scene_path, position_df_path, time_step, ped_height=1.5, ped_rx=True):
+    def __init__(self, scene_path, position_df_path, time_step, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -44,6 +44,7 @@ class Environment():
         self.n_tx = 0
         self.uavs = {}
         self.gus = self.createGroundUsers(position_df_path)
+        self.wind = wind_vector
 
 
     def createGroundUsers(self, position_df_path):
@@ -124,9 +125,9 @@ class Environment():
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.uavs.keys()]), np.array([x.vel for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.keys()]), np.array([x.vel for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel for x in self.uavs.keys()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.keys()]))
         
         a, tau = tf.squeeze(paths).cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         return -20 * np.log10(np.abs(a))
@@ -144,7 +145,7 @@ class Environment():
             vel (np.array(3,)): the initial velocity of the UAV2
             color (np.array(3,)): the color of the UAV used for visualization
         """
-        self.uavs[id] = UAV(id, mass, efficiency, pos, vel, self.time_step, color, self.ped_rx)
+        self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx)
         if self.ped_rx:
             self.scene.add(Transmitter(name=str(id), position=pos, color=color))
             self.n_tx += 1
@@ -169,16 +170,16 @@ class Environment():
             self.scene._receivers[str(id)].position = self.uavs[id].pos
     
 
-    def moveUAV(self, id, abs_pos, vel):
+    def moveUAV(self, id, abs_pos, abs_vel):
         """
         Moves the uav with the specified id to a a new absolution position and velocity
 
         Args:
             id (int): the unique id of the UAV
             abs_pos (np.array(3,)): the absolute position vector of the UAV after the move
-            abs_vel (np.array(3,)): the relative wind velocity vector of the UAV after the move
+            abs_vel (np.array(3,)): the absolute velocity vector of the UAV after the move
         """
-        self.uavs[id].move(abs_pos, vel)
+        self.uavs[id].move(abs_pos, abs_vel - self.wind)
 
 
     def moveUAV(self, id, relative_pos):
@@ -190,6 +191,32 @@ class Environment():
             relative_pos (np.array(3,)): the relative position of the UAV
         """
         self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel)
+
+    
+    def getUAVPos(self, id):
+        """
+        Gets the UAV position by Id
+
+        Args:
+            id (int): the unique id of the UAV
+
+        Returns:
+            np.array(3,): the position vector of the UAV
+        """
+        return self.uavs[id].pos
+
+
+    def getUAVVel(self, id):
+        """
+        Gets the absolute velocity of the UAV by Id
+
+        Args:
+            id (int): the unique id of the UAV
+        
+        Returns:
+            np.array(3,): the absolute velocity of the UAV
+        """
+        return self.uavs[id].vel + self.wind
 
 
     def updateGroundUser(self, id):
@@ -349,7 +376,7 @@ class UAV():
             for i in range(num_samples):
                 rtn += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
             
-            return rtn * self.mass
+            return rtn * self.mass / self.efficiency
 
 
     def move(self, new_pos, new_vel):
