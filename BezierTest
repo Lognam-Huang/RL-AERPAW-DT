@@ -1,10 +1,11 @@
 import numpy as np
 
 class Point():
-    def __init__(self, pos, vel, delta_t):
+    def __init__(self, pos, vel, delta_t, mass):
         self.pos = pos
         self.vel = vel
         self.delta_t = delta_t
+        self.mass = mass
 
     def move(self, position, velocity):
         """
@@ -32,8 +33,37 @@ class Point():
         res = np.dot(X, f)
 
         return res
+
+    def v(self, t, bezier):
+        """
+        Computes the velocity of an object moving along a Bezier curve defined by bezier at time t
+
+        Args:
+            t (float): the time to compute the velocity at
+            bezier (np.array(3,4)): an array of bezier parameters
+
+        Returns:
+            np.array(3,): a velocity vector
+        """
+
+        return -3 * (1 - t) * (1 - t) * bezier[0] + (9 * t * t - 12 * t + 3) * bezier[1] + (-9 * t * t + 6 * t) * bezier[2] + 3 * t * t * bezier[3]
     
-    def computeConsumption(self, bezier):
+    def a(self, t, bezier):
+        """
+        Computes the acceleration of an object moving along a Bezier curve defined by bezier at time t
+
+        Args:
+            t (float): the time to compute the acceleration at
+            bezier (np.array(3,4)): an array of bezier parameters
+
+        Returns:
+            np.array(3,): an acceleration vector
+        """
+
+        return 6 * (1 - t) * bezier[0] + (18 * t - 12) * bezier[1] + (6 - 18 * t) * bezier[2] + 6 * t * bezier[3]
+
+
+    def computeConsumption(self, bezier, num_samples):
         """
         Computes the consumption from the array of cubic bezier parameters
 
@@ -43,10 +73,20 @@ class Point():
         Returns:
             float: The work done by the UAV, in joules
         """
-        pass
+
+        dt = self.delta_t / num_samples
+        rtn = 0
+
+        for i in range(num_samples):
+            rtn += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
+        
+        return rtn * self.mass
     
 
 if __name__ == '__main__':
-    p = Point(np.array([1, 0.5, 2.1]), np.array([1, -1, 0.3]), 1)
-    print(p.move(position=np.array([-3, 2, 0]), velocity=np.array([-1, 1, 1])))
+    p = Point(np.array([1, 0.5, 2.1]), np.array([1, -1, 0.3]), 1, 2)
+    bezier = p.move(position=np.array([-3, 2, 0]), velocity=np.array([-1, 1, 1]))
+    print(bezier)
+
+    print(p.computeConsumption(bezier, 100))
 

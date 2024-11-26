@@ -18,6 +18,8 @@ from sionna.rt import Transmitter, Receiver
 
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
+# The number of samples to use when calculating the energy consumption
+NUM_INTEGRATION_SAMPLES = 1000
 
 class Environment():
     def __init__(self, scene_path, position_df_path, time_step, ped_height=1.5, ped_rx=True):
@@ -234,8 +236,15 @@ class UAV():
         self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
         self.bandwidth = bandwidth
         self.com_type = com_type
+        # This is used to speed up computation later in the simulation
+        self.bezier_matrix = np.linalg.inv(np.array([
+            [1, 0, 0, 0], 
+            [-3, 3, 0, 0], 
+            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
+            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
+        ]))
     
-    # TODO: Fix this from using impulse to using the change in position and velocity
+    # TODO: DEPRECATED
     def impulse(self, force, wind_vector=np.zeros(3)):
         """
         Updates the UAV's position and velocity with a constant impulse over a time step
@@ -270,49 +279,78 @@ class UAV():
         axis.quiver(x, y, z, self.vel[0], self.vel[1], self.vel[2], length=length, normalize=True)
 
 
-    # TODO: Deprecated
-    def update(self, new_pos, new_vel):
+    def v(self, t, bezier):
         """
-        Updates the UAV's position and veclocity
+        Computes the velocity of an object moving along a Bezier curve defined by bezier at time t
 
         Args:
-            new_pos (np.array(3,)): the UAV's new position
-            new_vel (np.array(3,)): the UAV's new velocity
-        """
-        self.pos = new_pos
-        self.vel = new_vel
+            t (float): the time to compute the velocity at
+            bezier (np.array(3,4)): an array of bezier parameters
 
+        Returns:
+            np.array(3,): a velocity vector
         """
-        TODO:
-        Update to include power consumption
-        """
+
+        return -3 * (1 - t) * (1 - t) * bezier[0] + (9 * t * t - 12 * t + 3) * bezier[1] + (-9 * t * t + 6 * t) * bezier[2] + 3 * t * t * bezier[3]
     
-    # TODO: Deprecated
-    def move(self, position, velocity):
+
+    def a(self, t, bezier):
+        """
+        Computes the acceleration of an object moving along a Bezier curve defined by bezier at time t
+
+        Args:
+            t (float): the time to compute the acceleration at
+            bezier (np.array(3,4)): an array of bezier parameters
+
+        Returns:
+            np.array(3,): an acceleration vector
+        """
+
+        return 6 * (1 - t) * bezier[0] + (18 * t - 12) * bezier[1] + (6 - 18 * t) * bezier[2] + 6 * t * bezier[3]
+
+    # TODO: Change to use analytical integration
+    def computeConsumption(self, bezier, num_samples):
+            """
+            Computes the consumption from the array of cubic bezier parameters
+
+            Args:
+                bezier (np.array(4, 3)): an array of bezier parameters
+
+            Returns:
+                float: The work done by the UAV, in joules
+            """
+
+            dt = self.delta_t / num_samples
+            rtn = 0
+
+            for i in range(num_samples):
+                rtn += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
+            
+            return rtn * self.mass
+
+
+    def move(self, new_pos, new_vel):
         """
         Moves the UAV from its current position and velocity to a new position and velocity over a single time step
         Uses a cubic Bezier curve to interpolate the points to minimize the consumption
         Updates the UAV's consumption with the work done by moving
 
         Args:
-            position (np.array(3,)): the new position of the UAV
-            velocity (np.array(3,)): the new velocity of the UAV
+            new_pos (np.array(3,)): the UAV's new position
+            new_vel (np.array(3,)): the UAV's new velocity
         """
 
-        # Array of paremters of the Bezier curve, dependent on time_step
-        X = np.linalg.inv(np.array([
-            [1, 0, 0, 0], 
-            [-3, 3, 0, 0], 
-            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
-            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
-        ]))
+        # Computing the bezier
+        f = np.array([self.pos, self.vel, new_pos, new_vel])
+        bezier = np.dot(self.bezier_matrix, f)
 
-        # Initial data matrix
-        f = np.array([self.pos, self.vel, position, velocity])
+        # Updating consumption
+        self.consumption += self.computeConsumption(bezier, NUM_INTEGRATION_SAMPLES)
+        
+        # Updating position and velocity
+        self.pos = new_pos
+        self.vel = new_vel
 
-        res = np.dot(X, f)
-
-        return res
 
     def getConsumption(self):
         """
