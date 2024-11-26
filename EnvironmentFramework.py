@@ -152,7 +152,7 @@ class Environment():
             self.scene.add(Receiver(name=str(id), position=pos, color=color))
             self.n_rx += 1
 
-    
+    # TODO: Deprecated
     def impulseUAV(self, id, force, wind_vector=np.zeros(3,)):
         """
         Administers the desired impulse to the UAV with the specified id, and updates its receiver / transmitter position
@@ -168,6 +168,29 @@ class Environment():
         else:
             self.scene._receivers[str(id)].position = self.uavs[id].pos
     
+
+    def moveUAV(self, id, abs_pos, vel):
+        """
+        Moves the uav with the specified id to a a new absolution position and velocity
+
+        Args:
+            id (int): the unique id of the UAV
+            abs_pos (np.array(3,)): the absolute position vector of the UAV after the move
+            abs_vel (np.array(3,)): the relative wind velocity vector of the UAV after the move
+        """
+        self.uavs[id].move(abs_pos, vel)
+
+
+    def moveUAV(self, id, relative_pos):
+        """
+        Moves the UAV to a new position relative to its current position, maintains current velocity
+
+        Args:
+            id (int): the unique id of the UAV
+            relative_pos (np.array(3,)): the relative position of the UAV
+        """
+        self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel)
+
 
     def updateGroundUser(self, id):
         """
