@@ -18,8 +18,11 @@ from sionna.rt import Transmitter, Receiver
 
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
+# Average Air Density Around the Area where the UAV Flies, kg / m^3
+AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
+
 
 class Environment():
     def __init__(self, scene_path, position_df_path, time_step, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
@@ -133,7 +136,7 @@ class Environment():
         return -20 * np.log10(np.abs(a))
     
 
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3)):
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), rotor_area=None):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -145,7 +148,11 @@ class Environment():
             vel (np.array(3,)): the initial velocity of the UAV2
             color (np.array(3,)): the color of the UAV used for visualization
         """
-        self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx)
+        if rotor_area is None:
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx, mass * 0.3)
+        else:
+            UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx, rotor_area)
+
         if self.ped_rx:
             self.scene.add(Transmitter(name=str(id), position=pos, color=color))
             self.n_tx += 1
@@ -263,7 +270,7 @@ class Environment():
 
 
 class UAV():
-    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, color=np.random.rand(3), com_type="tx"):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, color=np.random.rand(3), com_type="tx", rotor_area=0.5):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -275,7 +282,8 @@ class UAV():
             vel (np.array(3,)): the initial velocity of the UAV
             bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
             color (np.array(3,)): the color of the UAV used for visualization
-            com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both
+            com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both at the same time?
+            rotor_area (float): the total area of the UAV's rotors, in square meters
         """
         self.id = id
         self.mass = mass
@@ -286,6 +294,7 @@ class UAV():
         self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
         self.bandwidth = bandwidth
         self.com_type = com_type
+        self.rotor_area = rotor_area
         # This is used to speed up computation later in the simulation
         self.bezier_matrix = np.linalg.inv(np.array([
             [1, 0, 0, 0], 
@@ -358,7 +367,7 @@ class UAV():
 
         return 6 * (1 - t) * bezier[0] + (18 * t - 12) * bezier[1] + (6 - 18 * t) * bezier[2] + 6 * t * bezier[3]
 
-    # TODO: Change to use analytical integration
+
     def computeConsumption(self, bezier, num_samples):
             """
             Computes the consumption from the array of cubic bezier parameters
@@ -371,12 +380,14 @@ class UAV():
             """
 
             dt = self.delta_t / num_samples
-            rtn = 0
+            moving = 0
 
             for i in range(num_samples):
-                rtn += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
+                moving += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
             
-            return rtn * self.mass / self.efficiency
+            static = 0.5 * self.delta_t * (self.mass * GRAVITATIONAL_ACCEL) ** 1.5 / (self.rotor_area * AIR_DENSITY) ** 0.5
+            
+            return moving * self.mass / self.efficiency + static
 
 
     # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
