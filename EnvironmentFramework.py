@@ -25,7 +25,7 @@ NUM_INTEGRATION_SAMPLES = 1000
 
 
 class Environment():
-    def __init__(self, scene_path, position_df_path, time_step, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
+    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -34,13 +34,14 @@ class Environment():
             scene_path (str): the file path of the XML scene from Mitsuba
             position_df_pat (str): the file path of the csv position data
             time_step (float): the time step between simulation iterations
+            ped_height (float): the assumed height of the pedestrians, in meters
             ped_rx (bool): if the pedestrians are receivers and the UAVs are transmitters, default true
+            wind_vector (np.array(3,)): The velocity of the wind in the environment
         """
         print("Loading Scene")
         self.scene = sionna.rt.load_scene(scene_path)
         print("Parsing Positions")
         self.ped_rx = ped_rx
-        self.ped_df = self.parsePositions(position_df_path)
         self.time_step = time_step
         self.ped_height = ped_height
         self.n_rx = 0
@@ -70,13 +71,14 @@ class Environment():
             i += 1
         
         # Creating the ground users
+        print(res[0].columns)
         rtn = []
-        for i in range(len(res)):
+        for j in range(len(res)):
             if self.ped_rx:
-                rtn.append(GroundUser(i, res[i], height=1.5, com_type="rx"))
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="rx"))
                 self.n_rx += 1
             else:
-                rtn.append(GroundUser(i, res[i], height=1.5, com_type="tx"))
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="tx"))
                 self.n_tx += 1
                 
         return np.array(rtn)
@@ -385,7 +387,7 @@ class UAV():
             for i in range(num_samples):
                 moving += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
             
-            static = 0.5 * self.delta_t * (self.mass * GRAVITATIONAL_ACCEL) ** 1.5 / (self.rotor_area * AIR_DENSITY) ** 0.5
+            static = 0.5 * self.delta_t * ((self.mass * GRAVITATIONAL_ACCEL) ** 1.5) / ((self.rotor_area * AIR_DENSITY) ** 0.5)
             
             return moving * self.mass / self.efficiency + static
 
