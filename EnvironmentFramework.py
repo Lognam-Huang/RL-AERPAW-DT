@@ -25,6 +25,7 @@ NUM_INTEGRATION_SAMPLES = 1000
 
 
 class Environment():
+    # Tested!
     def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
         """
         Creates a new environment from a scene path and a position_df_path
@@ -49,6 +50,13 @@ class Environment():
         self.uavs = {}
         self.gus = self.createGroundUsers(position_df_path)
         self.wind = wind_vector
+        # This is used to speed up computation later in the simulation
+        self.bezier_matrix = np.linalg.inv(np.array([
+            [1, 0, 0, 0], 
+            [-3, 3, 0, 0], 
+            [(1 - self.time_step) ** 3, 3 * self.time_step * (1 - self.time_step) ** 2, 3 * self.time_step ** 2 * (1 - self.time_step), self.time_step ** 3], 
+            [-3 * (1 - self.time_step) ** 2, -6 * self.time_step * (1 - self.time_step) + 3 * (1 - self.time_step) ** 2, -3 * self.time_step ** 2 + 6 * self.time_step * (1 - self.time_step), 3 * self.time_step ** 2]
+        ]))
 
 
     def createGroundUsers(self, position_df_path):
@@ -71,7 +79,6 @@ class Environment():
             i += 1
         
         # Creating the ground users
-        print(res[0].columns)
         rtn = []
         for j in range(len(res)):
             if self.ped_rx:
@@ -80,6 +87,7 @@ class Environment():
             else:
                 rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="tx"))
                 self.n_tx += 1
+            self.scene.add(rtn[j].device)
                 
         return np.array(rtn)
     
@@ -103,11 +111,14 @@ class Environment():
             the shortest squared distance between any two uavs, in m
         """
         rtn = math.inf
-        for i in range(len(self.uavs)):
-            for j in range(i + 1, len(self.uavs)):
-                rtn = min(rtn, (self.uavs[i].pos[0] - self.uava[j].pos[0]) ** 2 +
-                          (self.uavs[i].pos[1] - self.uavs[j].pos[1]) ** 2,
-                          (self.uavs[i].pos[2] - self.uavs[j].pos[2]) ** 2)
+        keys = list(self.uavs.keys())
+        for i in range(len(keys)):
+            for j in range(i + 1, len(keys)):
+                rtn = min(rtn, 
+                (self.uavs[keys[i]].pos[0] - self.uavs[keys[j]].pos[0]) ** 2 +
+                (self.uavs[keys[i]].pos[1] - self.uavs[keys[j]].pos[1]) ** 2 +
+                (self.uavs[keys[i]].pos[2] - self.uavs[keys[j]].pos[2]) ** 2)
+
         return math.sqrt(rtn)
             
 
@@ -151,16 +162,19 @@ class Environment():
             color (np.array(3,)): the color of the UAV used for visualization
         """
         if rotor_area is None:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx, mass * 0.3)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, mass * 0.3)
         else:
-            UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, color, self.ped_rx, rotor_area)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, rotor_area)
 
         if self.ped_rx:
-            self.scene.add(Transmitter(name=str(id), position=pos, color=color))
+            self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
             self.n_tx += 1
         else:
-            self.scene.add(Receiver(name=str(id), position=pos, color=color))
+            self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
             self.n_rx += 1
+        
+        self.scene.add(self.uavs[id].device)
+
 
     # TODO: Deprecated
     def impulseUAV(self, id, force, wind_vector=np.zeros(3,)):
@@ -179,27 +193,31 @@ class Environment():
             self.scene._receivers[str(id)].position = self.uavs[id].pos
     
 
-    def moveUAV(self, id, abs_pos, abs_vel):
+    def moveAbsUAV(self, id, abs_pos, abs_vel):
         """
         Moves the uav with the specified id to a a new absolution position and velocity
+        Also updates the position of the communication device associated with the UAV
 
         Args:
             id (int): the unique id of the UAV
             abs_pos (np.array(3,)): the absolute position vector of the UAV after the move
             abs_vel (np.array(3,)): the absolute velocity vector of the UAV after the move
         """
-        self.uavs[id].move(abs_pos, abs_vel - self.wind)
+        self.uavs[id].move(abs_pos, abs_vel - self.wind, self.bezier_matrix)
+        self.uavs[id].device.position = abs_pos
 
 
-    def moveUAV(self, id, relative_pos):
+    def moveRelUAV(self, id, relative_pos):
         """
         Moves the UAV to a new position relative to its current position, maintains current velocity
+        Also updates the position of the communication device associated with the UAV
 
         Args:
             id (int): the unique id of the UAV
             relative_pos (np.array(3,)): the relative position of the UAV
         """
-        self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel)
+        self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel, self.bezier_matrix)
+        self.uavs[id].device.position = self.uavs[id].pos + relative_pos
 
     
     def getUAVPos(self, id):
@@ -233,10 +251,15 @@ class Environment():
         Moves a ground user to the next avaliable position and updates velocity
         """
         self.gus[id].update()
+        # Just update the x and y positions, the height stays constant
+        self.gus[id].device.position = tf.constant([self.gus[id].pos[0], self.gus[id].pos[1], self.gus[id].height])
+
+        """
         if self.ped_rx:
             self.scene._receivers[str(id)].position = self.gus[id].pos
         else:
             self.scene._transmitters[str(id)].position = self.gus[id].pos
+        """
     
 
     def setTransmitterArray(self, arr):
@@ -270,9 +293,46 @@ class Environment():
             uav.addUAVToPlot(length)
         plt.show()
 
+    # Tested!
+    def plotGUs(self):
+        """
+        Plots the Ground Users in 2D
+        """
+
+        for gu in self.gus:
+            plt.scatter(gu.pos[0], gu.pos[1])
+        plt.show()
+
+
+    def getBezier(self, x_i, x_f, v_i, v_f, samples):
+        """
+        Returns a number of sample points along the Bezier curve from the given position-velocity pairs
+
+        Args:
+            x_i (np.array(3,)): The initial position vector, in meters
+            x_f (np.array(3,)): The final position vector, in meters
+            v_i (np.array(3,)): The initial velocity vector, in m/s
+            v_f (np.array(3,)): The final velocity vector, in m/s
+        
+        Returns:
+            np.array(samples,3): An array of points along the calculated Bezier curve
+        """
+
+        f = np.array([x_i, v_i, x_f, v_f])
+        b = np.dot(self.bezier_matrix, f)
+
+        rtn = []
+        for i in range(samples):
+            t = self.time_step * i / samples
+            # Add the value of the parametric curve at time t
+            rtn.append(((1 - t) ** 3) * b[0] + 3 * t * ((1 - t) ** 2) * b[1] + 3 * (t ** 2) * (1 - t) * b[2] + (t ** 3) * b[3])
+
+
+        return np.array(rtn)
+
 
 class UAV():
-    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, color=np.random.rand(3), com_type="tx", rotor_area=0.5):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -295,15 +355,9 @@ class UAV():
         self.delta_t = delta_t
         self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
         self.bandwidth = bandwidth
-        self.com_type = com_type
         self.rotor_area = rotor_area
-        # This is used to speed up computation later in the simulation
-        self.bezier_matrix = np.linalg.inv(np.array([
-            [1, 0, 0, 0], 
-            [-3, 3, 0, 0], 
-            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
-            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
-        ]))
+        self.device = None  # Initialized later
+        
     
     # TODO: DEPRECATED
     def impulse(self, force, wind_vector=np.zeros(3)):
@@ -393,7 +447,7 @@ class UAV():
 
 
     # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
-    def move(self, new_pos, new_vel):
+    def move(self, new_pos, new_vel, bezier_matrix):
         """
         Moves the UAV from its current position and velocity to a new position and velocity over a single time step
         Uses a cubic Bezier curve to interpolate the points to minimize the consumption
@@ -406,7 +460,7 @@ class UAV():
 
         # Computing the bezier
         f = np.array([self.pos, self.vel, new_pos, new_vel])
-        bezier = np.dot(self.bezier_matrix, f)
+        bezier = np.dot(bezier_matrix, f)
 
         # Updating consumption
         self.consumption += self.computeConsumption(bezier, NUM_INTEGRATION_SAMPLES)
@@ -451,9 +505,9 @@ class GroundUser():
         self.delta_t = delta_t
         # TODO: Remove device this from the state
         if com_type == "tx":
-            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1]])
+            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height])
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1]])
+            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height])
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
