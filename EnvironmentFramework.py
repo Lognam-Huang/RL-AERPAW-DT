@@ -58,7 +58,7 @@ class Environment():
             [-3 * (1 - self.time_step) ** 2, -6 * self.time_step * (1 - self.time_step) + 3 * (1 - self.time_step) ** 2, -3 * self.time_step ** 2 + 6 * self.time_step * (1 - self.time_step), 3 * self.time_step ** 2]
         ]))
 
-
+    # Tested
     def createGroundUsers(self, position_df_path):
         """
         Parses the positions data from SUMO and creates a list of ground user objects
@@ -91,7 +91,7 @@ class Environment():
                 
         return np.array(rtn)
     
-
+    # Tested!
     def advancePedestrianPositions(self):
         """
         Advances all the pedestrian positions to the next their next time step
@@ -100,7 +100,7 @@ class Environment():
         for id in range(len(self.gus)):
             self.updateGroundUser(id)
     
-
+    # Tested!
     def computeShortestDistance(self):
         """
         Computes the shortest distance between any two UAVs, used for collision avoidance
@@ -121,7 +121,7 @@ class Environment():
 
         return math.sqrt(rtn)
             
-
+    # Tested!
     def visualize(self):
         """
         Visualizes the current receivers and transmitters in the scene.
@@ -148,7 +148,7 @@ class Environment():
         a, tau = tf.squeeze(paths).cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         return -20 * np.log10(np.abs(a))
     
-
+    # Tested
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), rotor_area=None):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
@@ -175,7 +175,6 @@ class Environment():
         
         self.scene.add(self.uavs[id].device)
 
-
     # TODO: Deprecated
     def impulseUAV(self, id, force, wind_vector=np.zeros(3,)):
         """
@@ -192,7 +191,7 @@ class Environment():
         else:
             self.scene._receivers[str(id)].position = self.uavs[id].pos
     
-
+    # Tested!
     def moveAbsUAV(self, id, abs_pos, abs_vel):
         """
         Moves the uav with the specified id to a a new absolution position and velocity
@@ -206,7 +205,7 @@ class Environment():
         self.uavs[id].move(abs_pos, abs_vel - self.wind, self.bezier_matrix)
         self.uavs[id].device.position = abs_pos
 
-
+    # Tested!
     def moveRelUAV(self, id, relative_pos):
         """
         Moves the UAV to a new position relative to its current position, maintains current velocity
@@ -219,33 +218,46 @@ class Environment():
         self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel, self.bezier_matrix)
         self.uavs[id].device.position = self.uavs[id].pos + relative_pos
 
-    
+    # Tested!
     def getUAVPos(self, id):
         """
         Gets the UAV position by Id
 
         Args:
-            id (int): the unique id of the UAV
+            id (str): the unique id of the UAV
 
         Returns:
             np.array(3,): the position vector of the UAV
         """
         return self.uavs[id].pos
 
-
+    # Tested!
     def getUAVVel(self, id):
         """
         Gets the absolute velocity of the UAV by Id
 
         Args:
-            id (int): the unique id of the UAV
+            id (str): the unique id of the UAV
         
         Returns:
             np.array(3,): the absolute velocity of the UAV
         """
         return self.uavs[id].vel + self.wind
+    
 
+    def getUAVConsumption(self, id):
+        """
+        Gets the power consumption of the specified UAV, in joules
 
+        Args:
+            id (str): the unique id of the UAV
+
+        Returns:
+            float: the consumption of the specified UAV, in joules
+        """
+        return self.uavs[id].getConsumption()
+
+    # Tested!
     def updateGroundUser(self, id):
         """
         Moves a ground user to the next avaliable position and updates velocity
@@ -281,16 +293,24 @@ class Environment():
         """
         self.scene.rx_array = arr
 
-
-    def plotUAVs(self, length=1):
+    # Tested!
+    def plotUAVs(self, length=None):
         """
         Plots the positions and velocities of all the current UAVs in 3 Dimensions
 
         Args:
-            length (float): the length of the normalized velocity vectors
+            length (float): the length of the normalized velocity vectors, None if not normalized
         """
-        for uav in self.uavs:
-            uav.addUAVToPlot(length)
+        axis = plt.figure().add_subplot(projection='3d')
+        for uav in self.uavs.values():
+            c = np.random.rand(3)
+            axis.scatter(uav.pos[0], uav.pos[1], uav.pos[2], color=c)
+            if not np.array_equal(uav.vel, np.zeros(3)):
+                x, y, z = np.meshgrid(uav.pos[0], uav.pos[1], uav.pos[2])
+                if length is None:
+                    axis.quiver(x, y, z, uav.vel[0], uav.vel[1], uav.vel[2], color=c)
+                else:
+                    axis.quiver(x, y, z, uav.vel[0], uav.vel[1], uav.vel[2], length=length, normalize=True, color=c)
         plt.show()
 
     # Tested!
@@ -380,7 +400,7 @@ class UAV():
         self.vel = v_f
         self.pos = x_f
 
-    
+    # TODO: DEPRECATED
     def addUAVToPlot(self, length):
         """
         Adds the UAV to a 3D plot with its position and a velocity normalized to length
@@ -423,7 +443,8 @@ class UAV():
 
         return 6 * (1 - t) * bezier[0] + (18 * t - 12) * bezier[1] + (6 - 18 * t) * bezier[2] + 6 * t * bezier[3]
 
-
+    # Sample points along the curve to see that consumption is evely distributed over the curve.
+    # TODO: Test with compairisons, straight and curved paths
     def computeConsumption(self, bezier, num_samples):
             """
             Computes the consumption from the array of cubic bezier parameters

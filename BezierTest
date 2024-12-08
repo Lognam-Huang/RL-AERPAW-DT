@@ -84,8 +84,8 @@ class Point():
     
 
 if __name__ == '__main__':
-    p = Point(np.array([0, 0, 0]), np.array([0, 0, 0]), 1, 2)
-    bezier = p.move(position=np.array([0, 0, 0]), velocity=np.array([-1, 1, 1]))
+    p = Point(np.array([1, 0, 0]), np.array([1, 0, 0]), 1, 2)
+    bezier = p.move(position=np.array([-1, 0, 0]), velocity=np.array([1, 0, 0]))
     print(bezier)
 
     print(p.computeConsumption(bezier, 100))
