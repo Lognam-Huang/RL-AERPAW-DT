@@ -1,7 +1,8 @@
 """
-@description Contains functionality for controlling UAVs and
+@description Contains functionality for controlling UAVs, Ground Users, and
 interfacing with Sionna methods.
-@date 11-8-2024
+@start-date 11-8-2024
+@end-date 12-10-2024
 @author(s) Everett Tucker
 """
 
@@ -23,7 +24,7 @@ AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
 
-
+# TODO: Add an environment.step function that takes the UAV updates and calls all the update functions
 class Environment():
     # Tested!
     def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
@@ -128,28 +129,36 @@ class Environment():
         """
         self.scene.preview(show_devices=True)
 
-
+    # Tested!
     def computeLOSLoss(self):
         """
-        Computes the Line-of-sight path loss across all pairs of transmitters and receivers
+        Computes the average Line-of-sight path quality across all pairs of transmitters and receivers.
+        A larger value means that the paths are better quality and the UAV is in a more
+        optimal position for communication with the Ground Users.
 
         Returns:
-            tf.tensor: A tensor describing the path loss across all pairs, in decibels
+            float: The average line-of-sight path quality across all pairs of transmitters and receivers.
         """
+
         paths = self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
                                          reflection=False, diffraction=False, scattering=False, check_scene=False)
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.keys()]), np.array([x.vel for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.vel for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.keys()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
         
-        a, tau = tf.squeeze(paths).cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
-        return -20 * np.log10(np.abs(a))
+        a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
+        
+        # Sum the reciprocoals of the values
+        rtn = 0
+        for x in tf.squeeze(a):
+            rtn += 1/np.log10(np.abs(x))
+        return -0.05 * rtn / (self.n_rx * self.n_tx)
     
     # Tested
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), rotor_area=None):
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -162,9 +171,9 @@ class Environment():
             color (np.array(3,)): the color of the UAV used for visualization
         """
         if rotor_area is None:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, mass * 0.3)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3)
         else:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, self.time_step, rotor_area)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area)
 
         if self.ped_rx:
             self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
@@ -244,7 +253,7 @@ class Environment():
         """
         return self.uavs[id].vel + self.wind
     
-
+    # Tested!
     def getUAVConsumption(self, id):
         """
         Gets the power consumption of the specified UAV, in joules
@@ -323,7 +332,7 @@ class Environment():
             plt.scatter(gu.pos[0], gu.pos[1])
         plt.show()
 
-
+    # Tested!
     def getBezier(self, x_i, x_f, v_i, v_f, samples):
         """
         Returns a number of sample points along the Bezier curve from the given position-velocity pairs
@@ -446,25 +455,25 @@ class UAV():
     # Sample points along the curve to see that consumption is evely distributed over the curve.
     # TODO: Test with compairisons, straight and curved paths
     def computeConsumption(self, bezier, num_samples):
-            """
-            Computes the consumption from the array of cubic bezier parameters
+        """
+        Computes the consumption from the array of cubic bezier parameters
 
-            Args:
-                bezier (np.array(4, 3)): an array of bezier parameters
+        Args:
+            bezier (np.array(4, 3)): an array of bezier parameters
 
-            Returns:
-                float: The work done by the UAV, in joules
-            """
+        Returns:
+            float: The work done by the UAV, in joules
+        """
 
-            dt = self.delta_t / num_samples
-            moving = 0
+        dt = self.delta_t / num_samples
+        moving = 0
 
-            for i in range(num_samples):
-                moving += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
-            
-            static = 0.5 * self.delta_t * ((self.mass * GRAVITATIONAL_ACCEL) ** 1.5) / ((self.rotor_area * AIR_DENSITY) ** 0.5)
-            
-            return moving * self.mass / self.efficiency + static
+        for i in range(num_samples):
+            moving += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
+        
+        static = 0.5 * self.delta_t * ((self.mass * GRAVITATIONAL_ACCEL) ** 1.5) / ((self.rotor_area * AIR_DENSITY) ** 0.5)
+        
+        return (moving * self.mass + static) / self.efficiency
 
 
     # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
