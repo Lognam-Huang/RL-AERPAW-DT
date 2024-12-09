@@ -128,20 +128,30 @@ class Environment():
         Visualizes the current receivers and transmitters in the scene.
         """
         self.scene.preview(show_devices=True)
+    
+
+    def computeLOSPaths(self):
+        """
+        Computes the line-of-sight paths for all potential receivers and transmitters
+
+        Returns:
+            (sionna.rt.Paths): All possible line-of-sight paths
+        """
+        return self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
+                                         reflection=False, diffraction=False, scattering=False, check_scene=False)
 
     # Tested!
     def computeLOSLoss(self):
         """
         Computes the average Line-of-sight path quality across all pairs of transmitters and receivers.
-        A larger value means that the paths are better quality and the UAV is in a more
-        optimal position for communication with the Ground Users.
+        A larger value means that the paths are better quality and the UAVs are in more
+        optimal positions for communication with the Ground Users.
 
         Returns:
             float: The average line-of-sight path quality across all pairs of transmitters and receivers.
         """
 
-        paths = self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
-                                         reflection=False, diffraction=False, scattering=False, check_scene=False)
+        paths = self.computeLOSPaths()
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
@@ -153,7 +163,58 @@ class Environment():
         
         # Sum the reciprocoals of the values
         rtn = 0
-        for x in tf.squeeze(a):
+        for x in tf.reshape(a, (-1)):
+            rtn += 1/np.log10(np.abs(x))
+        return -0.05 * rtn / (self.n_rx * self.n_tx)
+    
+
+    def computeGeneralPaths(self, max_depth, num_samples):
+        """
+        Computes line-of-sight, reflection, diffraction, and scattering
+        paths from all transmitters.
+
+        Args:
+            max_depth (int): the maximum reflection depth usually 2-3 works well
+            num_samples (int): the number of sample points to take from the
+            fiboncci sphere, usually about 10^4 or 10^5
+        
+        Returns:
+            (sionna.rt.Paths): All possible paths in the environment
+        """
+
+        return self.scene.compute_paths(max_depth=max_depth, method="fibonacci", num_samples=num_samples, los=True,
+                                         reflection=True, diffraction=True, scattering=True, check_scene=False)
+
+
+    def computeGeneralLoss(self, max_depth, num_samples):
+        """
+        Computes the average path quality for all different types of paths, including
+        line-of-sight, reflection, diffraction, and scattering for all UAV devices. A
+        larger value means that the path are better quality and the UAVs are in more
+        optimal positions for communication with the Ground Users.
+
+        Args:
+            max_depth (int): the maximum reflection depth usually 2-3 works well
+            num_samples (int): the number of sample points to take from the
+            fiboncci sphere, usually about 10^4 or 10^5
+        
+        Returns:
+            (float): The average path quality of all path types for each UAV
+        """
+
+        paths = self.computeGeneralPaths(max_depth, num_samples)
+
+        # Check the sampling frequency parameter for the doppler shift
+        if self.ped_rx:
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.vel for x in self.gus]))
+        else:
+            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
+        
+        a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
+        
+        # Sum the reciprocoals of the values
+        rtn = 0
+        for x in tf.reshape(a, (-1)):
             rtn += 1/np.log10(np.abs(x))
         return -0.05 * rtn / (self.n_rx * self.n_tx)
     
@@ -282,7 +343,7 @@ class Environment():
             self.scene._transmitters[str(id)].position = self.gus[id].pos
         """
     
-
+    # Tested!
     def setTransmitterArray(self, arr):
         """
         Sets the scene's transmitter array to arr
@@ -292,7 +353,7 @@ class Environment():
         """
         self.scene.tx_array = arr
 
-    
+    # Tested!
     def setReceiverArray(self, arr):
         """
         Sets the scene's receiver array to arr
