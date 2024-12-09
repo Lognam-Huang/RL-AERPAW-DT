@@ -123,13 +123,44 @@ class Environment():
         return math.sqrt(rtn)
             
     # Tested!
-    def visualize(self):
+    def visualize(self, paths=None, coverage_map=None):
         """
         Visualizes the current receivers and transmitters in the scene.
-        """
-        self.scene.preview(show_devices=True)
-    
+        Includes the paths and/or coverage map, if provided.
 
+        Args:
+            (sionna.rt.Paths): A paths object that you want to display in simulation
+            (sionna.rt.CoverageMap): A coverage map object that you want to display
+        """
+
+        if paths is None:
+            if coverage_map is None:
+                self.scene.preview(show_devices=True)
+            else:
+                self.scene.preview(show_devices=True, coverage_map=coverage_map)
+        else:
+            if coverage_map is None:
+                self.scene.preview(show_devices=True, paths=paths)
+            else:
+                self.scene.preview(show_devices=True, paths=paths, coverage_map=coverage_map)
+    
+    # Tested!
+    def computeCoverageMap(self, max_depth, num_samples):
+        """
+        Computes a coverage map for every transmitter using the provided
+        arguments for maximum reflection depth and the number of samples
+        on the fibonacci sphere.
+
+        Args:
+            max_depth (int): the maximum reflection depth computed
+            num_samples (int): the number of points to sample on the fibonacci sphere
+        """
+
+        return self.scene.coverage_map(max_depth=max_depth, cm_cell_size=(1,1), num_samples=num_samples, 
+                                        los=True, reflection=True, diffraction=True, 
+                                        edge_diffraction=True, ris=False, check_scene=False, num_runs=1)
+    
+    # Tested!
     def computeLOSPaths(self):
         """
         Computes the line-of-sight paths for all potential receivers and transmitters
@@ -167,7 +198,7 @@ class Environment():
             rtn += 1/np.log10(np.abs(x))
         return -0.05 * rtn / (self.n_rx * self.n_tx)
     
-
+    # Tested!
     def computeGeneralPaths(self, max_depth, num_samples):
         """
         Computes line-of-sight, reflection, diffraction, and scattering
@@ -185,7 +216,7 @@ class Environment():
         return self.scene.compute_paths(max_depth=max_depth, method="fibonacci", num_samples=num_samples, los=True,
                                          reflection=True, diffraction=True, scattering=True, check_scene=False)
 
-
+    # Tested!
     def computeGeneralLoss(self, max_depth, num_samples):
         """
         Computes the average path quality for all different types of paths, including
