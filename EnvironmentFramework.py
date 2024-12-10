@@ -2,11 +2,9 @@
 @description Contains functionality for controlling UAVs, Ground Users, and
 interfacing with Sionna methods.
 @start-date 11-8-2024
-@end-date 12-10-2024
+@updated 12-9-2024
 @author(s) Everett Tucker
 """
-
-#TODO: Look at AERPAW user manual to cross-reference ideas for this simulation framework
 
 import sionna
 import math
@@ -191,7 +189,6 @@ class Environment():
                                          reflection=False, diffraction=False, scattering=False, check_scene=False)
 
 
-    # TODO: Switch to Numpy or Tensorflow computation
     def computeLOSLoss(self):
         """
         Computes the average Line-of-sight path quality across all pairs of transmitters and receivers.
@@ -213,10 +210,8 @@ class Environment():
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
         # Sum the reciprocoals of the values
-        rtn = 0
-        for x in tf.reshape(a, (-1)):
-            rtn += 1/np.log10(np.abs(x))
-        return -0.05 * rtn / (self.n_rx * self.n_tx)
+        rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
+        return rtn.item()
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -237,7 +232,6 @@ class Environment():
                                          reflection=True, diffraction=True, scattering=True, check_scene=False)
 
 
-    # TODO: Switch to Numpy or Tensorflow computation
     def computeGeneralLoss(self, max_depth, num_samples):
         """
         Computes the average path quality for all different types of paths, including
@@ -265,10 +259,8 @@ class Environment():
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
         # Sum the reciprocoals of the values
-        rtn = 0
-        for x in tf.reshape(a, (-1)):
-            rtn += 1/np.log10(np.abs(x))
-        return -0.05 * rtn / (self.n_rx * self.n_tx)
+        rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
+        return rtn.item()
     
 
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None):
