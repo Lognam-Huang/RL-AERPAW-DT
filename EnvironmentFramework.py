@@ -444,6 +444,9 @@ class Environment():
 
         for gu in self.gus:
             plt.scatter(gu.pos[0], gu.pos[1])
+        plt.title(f'Ground User Positions for timestep: {self.gus[0].step}')
+        plt.xlabel("x-coordinate")
+        plt.ylabel('y-coordinate')
         plt.show()
 
 
