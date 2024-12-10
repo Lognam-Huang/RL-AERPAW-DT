@@ -2,7 +2,7 @@
 @description Contains functionality for controlling UAVs, Ground Users, and
 interfacing with Sionna methods.
 @start-date 11-8-2024
-@updated 12-9-2024
+@updated 12-10-2024
 @author(s) Everett Tucker
 """
 
@@ -22,7 +22,17 @@ AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
 
-# TODO: Add an environment.step function that takes the UAV updates and calls all the update functions
+"""
+TODO:
+Change the path loss functions or introduce another function that
+calculates the maximum achievable data rate over the connection.
+That requires having the signal-to-noise ratio, the initial signal
+power, and the path loss. I already have the path loss through
+so I just have to worry about the other stuff.
+
+Perhaps the SNR is not dependent on the path itself though and could
+be thought of as constant, as a hyperparameter of the simulation.
+"""
 class Environment():
     def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
         """
@@ -211,7 +221,7 @@ class Environment():
         
         # Sum the reciprocoals of the values
         rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
-        return rtn.item()
+        return np.squeeze(rtn)
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -260,7 +270,7 @@ class Environment():
         
         # Sum the reciprocoals of the values
         rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
-        return rtn.item()
+        return np.squeeze(rtn)
     
 
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None):
