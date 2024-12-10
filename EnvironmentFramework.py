@@ -26,7 +26,6 @@ NUM_INTEGRATION_SAMPLES = 1000
 
 # TODO: Add an environment.step function that takes the UAV updates and calls all the update functions
 class Environment():
-    # Tested!
     def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
         """
         Creates a new environment from a scene path and a position_df_path
@@ -59,7 +58,7 @@ class Environment():
             [-3 * (1 - self.time_step) ** 2, -6 * self.time_step * (1 - self.time_step) + 3 * (1 - self.time_step) ** 2, -3 * self.time_step ** 2 + 6 * self.time_step * (1 - self.time_step), 3 * self.time_step ** 2]
         ]))
 
-    # Tested
+
     def createGroundUsers(self, position_df_path):
         """
         Parses the positions data from SUMO and creates a list of ground user objects
@@ -83,7 +82,7 @@ class Environment():
         rtn = []
         for j in range(len(res)):
             if self.ped_rx:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="rx"))
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="rx"))
                 self.n_rx += 1
             else:
                 rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="tx"))
@@ -92,7 +91,7 @@ class Environment():
                 
         return np.array(rtn)
     
-    # Tested!
+
     def advancePedestrianPositions(self):
         """
         Advances all the pedestrian positions to the next their next time step
@@ -121,7 +120,7 @@ class Environment():
 
         self.advancePedestrianPositions()
 
-    # Tested!
+
     def computeShortestDistance(self):
         """
         Computes the shortest distance between any two UAVs, used for collision avoidance
@@ -142,7 +141,7 @@ class Environment():
 
         return math.sqrt(rtn)
             
-    # Tested!
+
     def visualize(self, paths=None, coverage_map=None):
         """
         Visualizes the current receivers and transmitters in the scene.
@@ -164,7 +163,7 @@ class Environment():
             else:
                 self.scene.preview(show_devices=True, paths=paths, coverage_map=coverage_map)
     
-    # Tested!
+
     def computeCoverageMap(self, max_depth, num_samples):
         """
         Computes a coverage map for every transmitter using the provided
@@ -180,7 +179,7 @@ class Environment():
                                         los=True, reflection=True, diffraction=True, 
                                         edge_diffraction=True, ris=False, check_scene=False, num_runs=1)
     
-    # Tested!
+
     def computeLOSPaths(self):
         """
         Computes the line-of-sight paths for all potential receivers and transmitters
@@ -191,7 +190,8 @@ class Environment():
         return self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
                                          reflection=False, diffraction=False, scattering=False, check_scene=False)
 
-    # Tested!
+
+    # TODO: Switch to Numpy or Tensorflow computation
     def computeLOSLoss(self):
         """
         Computes the average Line-of-sight path quality across all pairs of transmitters and receivers.
@@ -218,7 +218,7 @@ class Environment():
             rtn += 1/np.log10(np.abs(x))
         return -0.05 * rtn / (self.n_rx * self.n_tx)
     
-    # Tested!
+
     def computeGeneralPaths(self, max_depth, num_samples):
         """
         Computes line-of-sight, reflection, diffraction, and scattering
@@ -236,7 +236,8 @@ class Environment():
         return self.scene.compute_paths(max_depth=max_depth, method="fibonacci", num_samples=num_samples, los=True,
                                          reflection=True, diffraction=True, scattering=True, check_scene=False)
 
-    # Tested!
+
+    # TODO: Switch to Numpy or Tensorflow computation
     def computeGeneralLoss(self, max_depth, num_samples):
         """
         Computes the average path quality for all different types of paths, including
@@ -269,7 +270,7 @@ class Environment():
             rtn += 1/np.log10(np.abs(x))
         return -0.05 * rtn / (self.n_rx * self.n_tx)
     
-    # Tested
+
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
@@ -296,23 +297,7 @@ class Environment():
         
         self.scene.add(self.uavs[id].device)
 
-    # TODO: Deprecated
-    def impulseUAV(self, id, force, wind_vector=np.zeros(3,)):
-        """
-        Administers the desired impulse to the UAV with the specified id, and updates its receiver / transmitter position
 
-        Args:
-            id (int): the unique id number of the UAV
-            force (np.array(3,)): a vector of the force, in Newtons
-            wind_vector (np.array(3,)): a vector of the wind velocity, in m/s
-        """
-        self.uavs[id].impulse(force, wind_vector)
-        if self.ped_rx:
-            self.scene._transmitters[str(id)].position = self.uavs[id].pos
-        else:
-            self.scene._receivers[str(id)].position = self.uavs[id].pos
-    
-    # Tested!
     def moveAbsUAV(self, id, abs_pos, abs_vel):
         """
         Moves the uav with the specified id to a a new absolution position and velocity
@@ -326,7 +311,7 @@ class Environment():
         self.uavs[id].move(abs_pos, abs_vel - self.wind, self.bezier_matrix)
         self.uavs[id].device.position = abs_pos
 
-    # Tested!
+
     def moveRelUAV(self, id, relative_pos):
         """
         Moves the UAV to a new position relative to its current position, maintains current velocity
@@ -339,7 +324,7 @@ class Environment():
         self.uavs[id].move(self.uavs[id].pos + relative_pos, self.uavs[id].vel, self.bezier_matrix)
         self.uavs[id].device.position = self.uavs[id].pos + relative_pos
 
-    # Tested!
+
     def getUAVPos(self, id):
         """
         Gets the UAV position by Id
@@ -352,7 +337,7 @@ class Environment():
         """
         return self.uavs[id].pos
 
-    # Tested!
+
     def getUAVVel(self, id):
         """
         Gets the absolute velocity of the UAV by Id
@@ -365,7 +350,7 @@ class Environment():
         """
         return self.uavs[id].vel + self.wind
     
-    # Tested!
+
     def getUAVConsumption(self, id):
         """
         Gets the power consumption of the specified UAV, in joules
@@ -393,7 +378,7 @@ class Environment():
             rtn[x] = self.getUAVConsumption(x)
         return rtn
 
-    # Tested!
+
     def updateGroundUser(self, id):
         """
         Moves a ground user to the next avaliable position and updates velocity
@@ -409,7 +394,7 @@ class Environment():
             self.scene._transmitters[str(id)].position = self.gus[id].pos
         """
     
-    # Tested!
+
     def setTransmitterArray(self, arr):
         """
         Sets the scene's transmitter array to arr
@@ -419,7 +404,7 @@ class Environment():
         """
         self.scene.tx_array = arr
 
-    # Tested!
+
     def setReceiverArray(self, arr):
         """
         Sets the scene's receiver array to arr
@@ -429,7 +414,7 @@ class Environment():
         """
         self.scene.rx_array = arr
 
-    # Tested!
+
     def plotUAVs(self, length=None):
         """
         Plots the positions and velocities of all the current UAVs in 3 Dimensions
@@ -449,7 +434,7 @@ class Environment():
                     axis.quiver(x, y, z, uav.vel[0], uav.vel[1], uav.vel[2], length=length, normalize=True, color=c)
         plt.show()
 
-    # Tested!
+
     def plotGUs(self):
         """
         Plots the Ground Users in 2D
@@ -459,7 +444,7 @@ class Environment():
             plt.scatter(gu.pos[0], gu.pos[1])
         plt.show()
 
-    # Tested!
+
     def getBezier(self, x_i, x_f, v_i, v_f, samples):
         """
         Returns a number of sample points along the Bezier curve from the given position-velocity pairs
@@ -515,41 +500,6 @@ class UAV():
         self.device = None  # Initialized later
         
     
-    # TODO: DEPRECATED
-    def impulse(self, force, wind_vector=np.zeros(3)):
-        """
-        Updates the UAV's position and velocity with a constant impulse over a time step
-        Also updates the consumption with the new energy change
-        This should be the primary method for moving the UAV
-
-        Args:
-            time_step (float): the time, in seconds, to send the impulse for. Should match the time_step of the environment
-            force (np.array(3,)): the force, in Newtons, to apply to the UAV
-            wind_vector (np.array(3,)): the vector of the wind, each component in m/s
-        """
-
-        v_f = force * self.delta_t / self.mass + self.vel + wind_vector
-        x_f = (self.delta_t * self.delta_t / (2 * self.mass)) * force + self.vel * self.delta_t + wind_vector * self.delta_t
-        delta_k_e = 1/2 * self.mass * np.dot(v_f - self.vel, v_f - self.vel)
-        delta_p_e = self.mass * GRAVITATIONAL_ACCEL * (x_f[2] - self.pos[2])
-        self.consumption += (delta_k_e + delta_p_e) / self.efficiency
-        self.vel = v_f
-        self.pos = x_f
-
-    # TODO: DEPRECATED
-    def addUAVToPlot(self, length):
-        """
-        Adds the UAV to a 3D plot with its position and a velocity normalized to length
-
-        Args:
-            length (float): the length of the normalized velocity vectors
-        """
-        
-        axis = plt.figure().add_subplot(projection='3d')
-        x, y, z = np.meshgrid(self.pos[0], self.pos[1], self.pos[2])
-        axis.quiver(x, y, z, self.vel[0], self.vel[1], self.vel[2], length=length, normalize=True)
-
-
     def v(self, t, bezier):
         """
         Computes the velocity of an object moving along a Bezier curve defined by bezier at time t
@@ -644,7 +594,7 @@ class GroundUser():
 
         Args:
             id (int): the unique id number of the ground user
-            positions (np.array(*, 2)): an array of positions over time on the xy plane
+            positions (np.array(*, 3)): an array of positions over time on the xy plane
             initial_velocity (float): the velocity of the ground user at time zero
             height (float): the height of the ground user in meters
             bandwidth (float): the bandwidth of the ground user's device, in Mbps
