@@ -101,6 +101,26 @@ class Environment():
         for id in range(len(self.gus)):
             self.updateGroundUser(id)
     
+
+    def step(self, uav_positions):
+        """
+        Updates the simulation by moving all ground users to the next position
+        and moving all the uavs to the positions specified in UAV positions
+
+        Args:
+            dict(str, (np.array(3,), np.array(3,))): A dictionary of position, velocity tuples
+            that describe the new states of all the UAVs. Any uavs without a key in
+            uav_positions will remain in place after the step.
+        """
+
+        for x in self.uavs.keys():
+            if x in uav_positions:
+                self.moveAbsUAV(x, uav_positions[x][0], uav_positions[x][1])
+            else:
+                self.moveAbsUAV(x, self.uavs[x].pos, self.uavs[x].vel)
+
+        self.advancePedestrianPositions()
+
     # Tested!
     def computeShortestDistance(self):
         """
@@ -357,6 +377,21 @@ class Environment():
             float: the consumption of the specified UAV, in joules
         """
         return self.uavs[id].getConsumption()
+
+
+    def getConsumptions(self):
+        """
+        Returns a dictionary of all the id : consumption pairs for each UAV
+        currently in the simulation
+
+        Returns:
+            dict(str, float): A dictionary of all the id, consumption pairs for all uavs
+        """
+
+        rtn = {}
+        for x in self.uavs.keys():
+            rtn[x] = self.getUAVConsumption(x)
+        return rtn
 
     # Tested!
     def updateGroundUser(self, id):
