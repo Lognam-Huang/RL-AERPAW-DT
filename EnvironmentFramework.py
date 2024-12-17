@@ -2,7 +2,7 @@
 @description Contains functionality for controlling UAVs, Ground Users, and
 interfacing with Sionna methods.
 @start-date 11-8-2024
-@updated 12-10-2024
+@updated 12-17-2024
 @author(s) Everett Tucker
 """
 
@@ -534,8 +534,7 @@ class UAV():
 
         return 6 * (1 - t) * bezier[0] + (18 * t - 12) * bezier[1] + (6 - 18 * t) * bezier[2] + 6 * t * bezier[3]
 
-    # Sample points along the curve to see that consumption is evely distributed over the curve.
-    # TODO: Test with compairisons, straight and curved paths
+
     def computeConsumption(self, bezier, num_samples):
         """
         Computes the consumption from the array of cubic bezier parameters
@@ -559,6 +558,7 @@ class UAV():
 
 
     # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
+    # The method for this could be with ray tracing, if there are no paths from UAV to outside, then it has collided with a building.
     def move(self, new_pos, new_vel, bezier_matrix):
         """
         Moves the UAV from its current position and velocity to a new position and velocity over a single time step
