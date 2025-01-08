@@ -617,9 +617,9 @@ class GroundUser():
         self.delta_t = delta_t
         # TODO: Remove device this from the state
         if com_type == "tx":
-            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height])
+            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=np.zeros(3))
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height])
+            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=np.zeros(3))
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
