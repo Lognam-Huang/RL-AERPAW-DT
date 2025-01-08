@@ -630,6 +630,6 @@ class GroundUser():
         """
         self.step += 1
         if self.step >= len(self.positions):
-            raise ValueError("No more positions to update for Ground User: " + self.id)
+            raise ValueError(f'No more positions to update for Ground User: {self.id}')
         self.vel = (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
         self.pos = self.positions[self.step]
