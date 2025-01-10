@@ -34,7 +34,7 @@ Perhaps the SNR is not dependent on the path itself though and could
 be thought of as constant, as a hyperparameter of the simulation.
 """
 class Environment():
-    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, wind_vector=np.zeros(3)):
+    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3)):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -45,6 +45,7 @@ class Environment():
             time_step (float): the time step between simulation iterations
             ped_height (float): the assumed height of the pedestrians, in meters
             ped_rx (bool): if the pedestrians are receivers and the UAVs are transmitters, default true
+            ped_color (np.array(3,)): The RGB Color of the pedestrians, where each entry is in [0, 1]. Defaults to black.
             wind_vector (np.array(3,)): The velocity of the wind in the environment
         """
         print("Loading Scene")
@@ -53,6 +54,7 @@ class Environment():
         self.ped_rx = ped_rx
         self.time_step = time_step
         self.ped_height = ped_height
+        self.ped_color = ped_color
         self.n_rx = 0
         self.n_tx = 0
         self.uavs = {}
@@ -90,10 +92,10 @@ class Environment():
         rtn = []
         for j in range(len(res)):
             if self.ped_rx:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="rx"))
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="rx", delta_t=self.time_step, color=self.ped_color))
                 self.n_rx += 1
             else:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"]]).T, height=self.ped_height, com_type="tx"))
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="tx", delta_t=self.time_step, color=self.ped_color))
                 self.n_tx += 1
             self.scene.add(rtn[j].device)
                 
@@ -388,13 +390,6 @@ class Environment():
         self.gus[id].update()
         # Just update the x and y positions, the height stays constant
         self.gus[id].device.position = tf.constant([self.gus[id].pos[0], self.gus[id].pos[1], self.gus[id].height])
-
-        """
-        if self.ped_rx:
-            self.scene._receivers[str(id)].position = self.gus[id].pos
-        else:
-            self.scene._transmitters[str(id)].position = self.gus[id].pos
-        """
     
 
     def setTransmitterArray(self, arr):
@@ -593,7 +588,7 @@ class UAV():
     
 
 class GroundUser():
-    def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.random.rand(3)):
+    def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3)):
         """
         Creates a new ground user with the specified parameters
 
@@ -615,11 +610,10 @@ class GroundUser():
         self.height = height
         self.bandwidth = bandwidth
         self.delta_t = delta_t
-        # TODO: Remove device this from the state
         if com_type == "tx":
-            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=np.zeros(3))
+            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=color)
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=np.zeros(3))
+            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=color)
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
