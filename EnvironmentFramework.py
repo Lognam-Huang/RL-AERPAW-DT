@@ -48,9 +48,9 @@ class Environment():
             ped_color (np.array(3,)): The RGB Color of the pedestrians, where each entry is in [0, 1]. Defaults to black.
             wind_vector (np.array(3,)): The velocity of the wind in the environment
         """
-        print("Loading Scene")
+        # print("Loading Scene")
         self.scene = sionna.rt.load_scene(scene_path)
-        print("Parsing Positions")
+        # print("Parsing Positions")
         self.ped_rx = ped_rx
         self.time_step = time_step
         self.ped_height = ped_height
