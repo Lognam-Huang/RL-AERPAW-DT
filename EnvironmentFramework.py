@@ -17,10 +17,14 @@ from sionna.rt import Transmitter, Receiver
 
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
+# The Boltzmann Constant in Joules/Kelvin
+BOLTZMANN_CONSTANT = 1.380649e-23
 # Average Air Density Around the Area where the UAV Flies, kg / m^3
 AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
+# The Receiver Noise Figure in dB
+RECEIVER_NOISE_FIGURE = 6
 
 """
 TODO:
@@ -34,7 +38,7 @@ Perhaps the SNR is not dependent on the path itself though and could
 be thought of as constant, as a hyperparameter of the simulation.
 """
 class Environment():
-    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3)):
+    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3), temperature=290):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -47,6 +51,7 @@ class Environment():
             ped_rx (bool): if the pedestrians are receivers and the UAVs are transmitters, default true
             ped_color (np.array(3,)): The RGB Color of the pedestrians, where each entry is in [0, 1]. Defaults to black.
             wind_vector (np.array(3,)): The velocity of the wind in the environment
+            temperature (float): the temperature of the environment, in degrees Kelvin
         """
         # print("Loading Scene")
         self.scene = sionna.rt.load_scene(scene_path)
@@ -111,22 +116,24 @@ class Environment():
             self.updateGroundUser(id)
     
 
-    def step(self, uav_positions):
+    def step(self, uav_params):
         """
-        Updates the simulation by moving all ground users to the next position
-        and moving all the uavs to the positions specified in UAV positions
+        Updates the simulation by moving all ground users to the next position,
+        updating the UAVs' signal power, and moving all the uavs to the positions
+         specified in UAV params
 
         Args:
-            dict(str, (np.array(3,), np.array(3,))): A dictionary of position, velocity tuples
+            dict(str, (float, np.array(3,), np.array(3,))): A dictionary of signal power, position, velocity tuples
             that describe the new states of all the UAVs. Any uavs without a key in
-            uav_positions will remain in place after the step.
+            uav_positions will remain in place after the step and their signal power will remain constant.
         """
 
         for x in self.uavs.keys():
-            if x in uav_positions:
-                self.moveAbsUAV(x, uav_positions[x][0], uav_positions[x][1])
+            if x in uav_params:
+                self.moveAbsUAV(x, uav_params[x][1], uav_params[x][2])
             else:
                 self.moveAbsUAV(x, self.uavs[x].pos, self.uavs[x].vel)
+            self.setUAVSignalPower(x, uav_params[x][0])
 
         self.advancePedestrianPositions()
 
@@ -203,12 +210,12 @@ class Environment():
 
     def computeLOSLoss(self):
         """
-        Computes the average Line-of-sight path quality across all pairs of transmitters and receivers.
-        A larger value means that the paths are better quality and the UAVs are in more
+        Computes the average Line-of-sight theoretical maximum data rate across all pairs of transmitters and receivers.
+        A larger value means that the paths can send more data and the UAVs are in more
         optimal positions for communication with the Ground Users.
 
         Returns:
-            float: The average line-of-sight path quality across all pairs of transmitters and receivers.
+            float: The average of the theoretical maximum data rate across all lin-of-sight paths in the simulation
         """
 
         paths = self.computeLOSPaths()
@@ -246,10 +253,10 @@ class Environment():
 
     def computeGeneralLoss(self, max_depth, num_samples):
         """
-        Computes the average path quality for all different types of paths, including
-        line-of-sight, reflection, diffraction, and scattering for all UAV devices. A
-        larger value means that the path are better quality and the UAVs are in more
-        optimal positions for communication with the Ground Users.
+        Computes the average theoretical maximum data rate for all different types of paths, including
+        line-of-sight, reflection, diffraction, and scattering for each transmitter. A
+        larger value means that a UAV is in a more optimial position and can send
+        more data to/from the Ground Users.
 
         Args:
             max_depth (int): the maximum reflection depth usually 2-3 works well
@@ -257,7 +264,7 @@ class Environment():
             fiboncci sphere, usually about 10^4 or 10^5
         
         Returns:
-            (float): The average path quality of all path types for each UAV
+            np.array(num_tx): The theoretical maximum data rate of all possible paths for each transmitter
         """
 
         paths = self.computeGeneralPaths(max_depth, num_samples)
@@ -270,12 +277,13 @@ class Environment():
         
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
-        # Sum the reciprocoals of the values
+        # Squeeze out unnessesary dimensions, should be 2D with num_tx * num_paths
+        print(a.shape)
         rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
         return np.squeeze(rtn)
     
 
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None):
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -286,11 +294,14 @@ class Environment():
             pos (np.array(3,)): the initial position of the UAV
             vel (np.array(3,)): the initial velocity of the UAV2
             color (np.array(3,)): the color of the UAV used for visualization
+            bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
+            rotor_area (float): the area of the UAV's rotors, in m^2
+            signal_power (float): the transmitter/receiver power of the UAV, in watts
         """
         if rotor_area is None:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power)
         else:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power)
 
         if self.ped_rx:
             self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
@@ -300,6 +311,18 @@ class Environment():
             self.n_rx += 1
         
         self.scene.add(self.uavs[id].device)
+
+
+    def setUAVSignalPower(self, id, power):
+        """
+        Updates the signal power of the specified UAV
+
+        Args:
+            id (int): the unique id of the UAV
+            power (float): the signal power of the UAV, in watts
+        """
+        if power >= 0:
+            self.uavs[id].signal_power = power
 
 
     def moveAbsUAV(self, id, abs_pos, abs_vel):
@@ -473,7 +496,7 @@ class Environment():
 
 
 class UAV():
-    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -487,6 +510,7 @@ class UAV():
             color (np.array(3,)): the color of the UAV used for visualization
             com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both at the same time?
             rotor_area (float): the total area of the UAV's rotors, in square meters
+            signal_power (float): the transmitter/receiver power of the UAV, in watts
         """
         self.id = id
         self.mass = mass
@@ -497,6 +521,7 @@ class UAV():
         self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
         self.bandwidth = bandwidth
         self.rotor_area = rotor_area
+        self.signal_power = signal_power
         self.device = None  # Initialized later
         
     
@@ -532,13 +557,16 @@ class UAV():
 
     def computeConsumption(self, bezier, num_samples):
         """
-        Computes the consumption from the array of cubic bezier parameters
+        Computes the consumption from the array of cubic bezier parameters through
+        numerical integration with the specified number of samples and
+        includes the consumption from the signal power the UAV is currently set at
 
         Args:
             bezier (np.array(4, 3)): an array of bezier parameters
+            num_samples (int): the number of samples used in numerical integration
 
         Returns:
-            float: The work done by the UAV, in joules
+            float: The energy consumed by the UAV, in joules
         """
 
         dt = self.delta_t / num_samples
@@ -548,8 +576,9 @@ class UAV():
             moving += np.abs(np.dot(self.a(dt * i, bezier), self.v(dt * i, bezier))) * dt
         
         static = 0.5 * self.delta_t * ((self.mass * GRAVITATIONAL_ACCEL) ** 1.5) / ((self.rotor_area * AIR_DENSITY) ** 0.5)
-        
-        return (moving * self.mass + static) / self.efficiency
+        signal = self.delta_t * self.signal_power
+
+        return (moving * self.mass + static) / self.efficiency + signal
 
 
     # TODO: Add object checks along the bezier curve trajectory, check for building checks and potentially UAV checks
