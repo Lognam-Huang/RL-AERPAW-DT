@@ -531,6 +531,18 @@ class UAV():
         self.device = None  # Initialized later
         
     
+    def p(self, t, bezier):
+        """
+        Computes the position of an object moving along a Bezier curve defined by bezier at time t
+
+        Args:
+            t (float): the time to compute the position at
+            bezier (np.array(3,4)): an array of bezier parameters
+        """
+
+        return (1 - t) * (1 - t) * (1 - t) * bezier[0] + 3 * t * (1 - 1) * (1 - t) * bezier[1] + 3 * t * t * (1 - t) * bezier[2] + t * t * t * bezier[3]
+
+
     def v(self, t, bezier):
         """
         Computes the velocity of an object moving along a Bezier curve defined by bezier at time t
@@ -621,6 +633,30 @@ class UAV():
         """
         return self.consumption
     
+
+    def computeDistance(self, bezier, time_accuracy=0.001):
+        """
+        Computes the shortest distance between the uav and any objects in the scene.
+        This does not account for other UAVs or pedestrians. That should be done using the
+        computeShortestDistance function
+
+        Args:
+            bezier (np.array(3,4)): the bezier parameters that define the movement curve
+            time_sensitivity (float): The desired accuracy for the time at which the UAV is closest to a building
+
+        Returns:
+            (float): the closest distance from the UAV to a building, in meters 
+        """
+
+        left = 0
+        right = self.delta_t
+        while right - left > time_accuracy:
+            t1 = (2 * left + right) / 3
+            t2 = (left + 2 * right) / 3
+
+            # Compute distance at p(t1, bezier) and p(t2, bezier)
+            # Update the parameters of the ternary search
+            
 
 class GroundUser():
     def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3)):
