@@ -23,8 +23,6 @@ BOLTZMANN_CONSTANT = 1.380649e-23
 AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
-# The Receiver Noise Figure in dB
-RECEIVER_NOISE_FIGURE = 6
 
 """
 TODO:
@@ -64,6 +62,7 @@ class Environment():
         self.n_tx = 0
         self.uavs = {}
         self.gus = self.createGroundUsers(position_df_path)
+        self.temperature = temperature
         self.wind = wind_vector
         # This is used to speed up computation later in the simulation
         self.bezier_matrix = np.linalg.inv(np.array([
