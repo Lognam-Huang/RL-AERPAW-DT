@@ -208,7 +208,7 @@ class Environment():
                                          reflection=False, diffraction=False, scattering=False, check_scene=False)
 
 
-    def computeLOSLoss(self):
+    def computeLOSDataRate(self):
         """
         Computes the average Line-of-sight theoretical maximum data rate across all pairs of transmitters and receivers.
         A larger value means that the paths can send more data and the UAVs are in more
@@ -228,9 +228,13 @@ class Environment():
         
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
-        # Sum the reciprocoals of the values
-        rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
-        return np.squeeze(rtn)
+        # Computes the sum of the theoetical maximum data rates for each UAV in simulation
+        rtn = []
+        a = tf.squeeze(a)
+        for uav in self.uavs.values():
+            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + 100 * np.abs(a[:, int(uav.id), :]) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
+        
+        return tf.convert_to_tensor(rtn)
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -251,7 +255,7 @@ class Environment():
                                          reflection=True, diffraction=True, scattering=True, check_scene=False)
 
 
-    def computeGeneralLoss(self, max_depth, num_samples):
+    def computeGeneralDataRate(self, max_depth, num_samples):
         """
         Computes the average theoretical maximum data rate for all different types of paths, including
         line-of-sight, reflection, diffraction, and scattering for each transmitter. A
@@ -277,10 +281,13 @@ class Environment():
         
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
-        # Squeeze out unnessesary dimensions, should be 2D with num_tx * num_paths
-        print(a.shape)
-        rtn = -0.05 * tf.math.reduce_sum(1 / tf.experimental.numpy.log10(tf.math.abs(tf.reshape(a, (-1))))) / (self.n_rx * self.n_tx)
-        return np.squeeze(rtn)
+        # Computes the sum of the theoetical maximum data rates for each UAV in simulation
+        rtn = []
+        a = tf.squeeze(a)
+        for uav in self.uavs.values():
+            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + 100 * np.abs(a[:, int(uav.id), :]) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
+        
+        return tf.convert_to_tensor(rtn)
     
 
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0):
