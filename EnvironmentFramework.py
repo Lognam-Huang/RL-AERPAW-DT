@@ -634,6 +634,7 @@ class UAV():
         return self.consumption
     
 
+    # TODO: Deprecated and likely useless for future applications
     def computeDistance(self, bezier, time_accuracy=0.001):
         """
         Computes the shortest distance between the uav and any objects in the scene.
