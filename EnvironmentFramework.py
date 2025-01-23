@@ -214,7 +214,7 @@ class Environment():
         optimal positions for communication with the Ground Users.
 
         Returns:
-            float: The average of the theoretical maximum data rate across all lin-of-sight paths in the simulation
+            float: The average of the theoretical maximum data rate across all line-of-sight paths in the simulation
         """
 
         paths = self.computeLOSPaths()
@@ -228,10 +228,11 @@ class Environment():
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
+        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
         rtn = []
         a = tf.squeeze(a)
         for uav in self.uavs.values():
-            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + 100 * np.abs(a[:, int(uav.id), :]) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
+            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
         
         return tf.convert_to_tensor(rtn)
     
@@ -281,10 +282,11 @@ class Environment():
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
+        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
         rtn = []
         a = tf.squeeze(a)
         for uav in self.uavs.values():
-            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + 100 * np.abs(a[:, int(uav.id), :]) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
+            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
         
         return tf.convert_to_tensor(rtn)
     
