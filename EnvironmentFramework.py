@@ -2,7 +2,7 @@
 @description Contains functionality for controlling UAVs, Ground Users, and
 interfacing with Sionna methods.
 @start-date 11-8-2024
-@updated 12-17-2024
+@updated 1-29-2025
 @author(s) Everett Tucker
 """
 
@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from ortools.linear_solver import pywraplp
 from sionna.rt import Antenna, AntennaArray
 from sionna.rt import Transmitter, Receiver
 
@@ -331,6 +332,8 @@ class Environment():
         """
         if power >= 0:
             self.uavs[id].signal_power = power
+        else:
+            raise ValueError("Signal power must be non-negative")
 
 
     def moveAbsUAV(self, id, abs_pos, abs_vel):
@@ -499,8 +502,57 @@ class Environment():
             # Add the value of the parametric curve at time t
             rtn.append(((1 - t) ** 3) * b[0] + 3 * t * ((1 - t) ** 2) * b[1] + 3 * (t ** 2) * (1 - t) * b[2] + (t ** 3) * b[3])
 
-
         return np.array(rtn)
+    
+
+    def assignGUs(self, scores, weights, capacities):
+        """
+        Args:
+        scores (np.array(num_uavs, num_gus)): An array of path qualities, should be theoretical maximum throughput values in bit/sec
+        weights (np.array(num_gus)): An array of the desired data rates for each ground user in bit/sec
+        capacities (np.array(num_uavs)): An array of the UAV data throughput capacity in bit/sec
+
+        Returns:
+            tuple(list(num_uavs, num_gus_assigned), float, float): A tuple where the first value is a list of the indices of the ground users assigned to each UAV,
+            the second value is the total path quality of assigned connections,
+            the third value is the coverage percentage, the proportion of GUs serviced by the UAVs
+        """
+
+        solver = pywraplp.Solver.CreateSolver('GLOP')
+
+        # Create variables
+        x = []
+        for i in range(self.num_gus):
+            row = []
+            for j in range(self.num_uavs):
+                row.append(solver.IntVar(0, 1, ""))
+            x.append(row)
+        x = np.array(x)
+
+        # Constraints: Each task assigned to exactly one agent
+        for i in range(self.num_gus):
+            solver.Add(np.sum(x[i]) <= 1)
+            
+        # Constraints: Capacity limits for agents
+        for j in range(self.num_uavs):
+            solver.Add(weights.dot(x[:, j]) <= capacities[j])
+
+        # Adding objective
+        objective = solver.Objective()
+        for i in range(self.num_gus):
+            for j in range(self.num_uavs):
+                objective.SetCoefficient(x[i][j], scores[j][i])
+        objective.SetMaximization()
+
+        # Solving
+        if solver.Solve() == pywraplp.Solver.OPTIMAL:
+            rtn = []
+            for j in range(self.num_uavs):
+                rtn.append([i for i in range(self.num_gus) if x[i][j].solution_value() > 0.5])
+            coverage = sum([len(x) for x in rtn]) / self.num_gus
+            return rtn, objective.Value(), coverage
+        else:
+            raise ValueError("The model doesn't converge for this input")
 
 
 class UAV():
