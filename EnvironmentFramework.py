@@ -215,27 +215,37 @@ class Environment():
         optimal positions for communication with the Ground Users.
 
         Returns:
-            float: The average of the theoretical maximum data rate across all line-of-sight paths in the simulation
+            np.array(num_rx, num_tx): The total theoretical maximum data rate for each pair of receivers and transmitters across all line-of-sight paths in the simulation
         """
 
         paths = self.computeLOSPaths()
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.vel for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.getVelocity() for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
         
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
-        rtn = []
-        a = tf.squeeze(a)
+
+        a = tf.squeeze(a)  # TODO: If I only have one User or UAV in the simulation this is going to cause an error
+        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs.values()], dtype=tf.float32)
+        bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1]), [self.n_rx, self.n_tx])
+        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs.values()], dtype=tf.float32)
+        signal_power = tf.broadcast_to(tf.reshape(signal_power, [1, -1]), [self.n_rx, self.n_tx])
+
+        return bandwidth * np.log2(1 + (signal_power * np.abs(a) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth))
+        """
+        # return tf.convert_to_tensor(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth)), axis=2))
+
         for uav in self.uavs.values():
-            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
+            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth)), axis=2))
         
         return tf.convert_to_tensor(rtn)
+        """
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -269,27 +279,38 @@ class Environment():
             fiboncci sphere, usually about 10^4 or 10^5
         
         Returns:
-            np.array(num_tx): The theoretical maximum data rate of all possible paths for each transmitter
+            np.array(num_rx, num_tx): The theoretical maximum data rate of all possible paths for each transmitter
         """
 
         paths = self.computeGeneralPaths(max_depth, num_samples)
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.vel for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.getVelocity() for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
         
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
+
+        a = tf.squeeze(a)
+        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs.values()], dtype=tf.float32)
+        bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
+        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs.values()], dtype=tf.float32)
+        signal_power = tf.broadcast_to(tf.reshape(signal_power, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
+
+        return tf.math.reduce_sum(bandwidth * np.log2(1 + (signal_power * np.abs(tf.squeeze(a)) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth)), axis=2).numpy().astype(np.float64)
+
+        """
         rtn = []
         a = tf.squeeze(a)
         for uav in self.uavs.values():
             rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
         
         return tf.convert_to_tensor(rtn)
+        """
     
 
     def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0):
@@ -423,7 +444,7 @@ class Environment():
         """
         self.gus[id].update()
         # Just update the x and y positions, the height stays constant
-        self.gus[id].device.position = tf.constant([self.gus[id].pos[0], self.gus[id].pos[1], self.gus[id].height])
+        self.gus[id].device.position = tf.constant([self.gus[id].getPosition()[0], self.gus[id].getPosition()[1], self.gus[id].height])
     
 
     def setTransmitterArray(self, arr):
@@ -472,7 +493,7 @@ class Environment():
         """
 
         for gu in self.gus:
-            plt.scatter(gu.pos[0], gu.pos[1])
+            plt.scatter(gu.getPosition()[0], gu.getPosition()[1])
         plt.title(f'Ground User Positions for timestep: {self.gus[0].step}')
         plt.xlabel("x-coordinate")
         plt.ylabel('y-coordinate')
@@ -505,58 +526,58 @@ class Environment():
         return np.array(rtn)
     
 
-    def assignGUs(self, scores, weights, capacities):
+    def assignGUs(self, scores):
         """
         Args:
-        scores (np.array(num_uavs, num_gus)): An array of path qualities, should be theoretical maximum throughput values in bit/sec
-        weights (np.array(num_gus)): An array of the desired data rates for each ground user in bit/sec
-        capacities (np.array(num_uavs)): An array of the UAV data throughput capacity in bit/sec
+        scores (np.array(num_rx, num_tx)): An array of path qualities, should be theoretical maximum throughput values in bit/sec, dtype should be np.float64
 
         Returns:
-            tuple(list(num_uavs, num_gus_assigned), float, float): A tuple where the first value is a list of the indices of the ground users assigned to each UAV,
+            tuple(list(num_tx, num_rx_assigned), float, float): A tuple where the first value is a list of the indices of the ground users assigned to each UAV,
             the second value is the total path quality of assigned connections,
             the third value is the coverage percentage, the proportion of GUs serviced by the UAVs
         """
 
         solver = pywraplp.Solver.CreateSolver('GLOP')
-
+        
         # Create variables
         x = []
-        for i in range(self.num_gus):
+        for i in range(self.n_rx):
             row = []
-            for j in range(self.num_uavs):
+            for j in range(self.n_tx):
+
                 row.append(solver.IntVar(0, 1, ""))
             x.append(row)
         x = np.array(x)
+        capacities = np.array([x.num_channels for x in self.uavs.values()])
 
-        # Constraints: Each task assigned to exactly one agent
-        for i in range(self.num_gus):
+        # Constraints: Each task assigned to at most one agent
+        for i in range(self.n_rx):
             solver.Add(np.sum(x[i]) <= 1)
             
-        # Constraints: Capacity limits for agents
-        for j in range(self.num_uavs):
-            solver.Add(weights.dot(x[:, j]) <= capacities[j])
+        # Constraints: UAV j has at most capacities[j] connections
+        for j in range(self.n_tx):
+            solver.Add(np.sum(x[:, j]) <= capacities[j])
 
         # Adding objective
         objective = solver.Objective()
-        for i in range(self.num_gus):
-            for j in range(self.num_uavs):
-                objective.SetCoefficient(x[i][j], scores[j][i])
+        for i in range(self.n_rx):
+            for j in range(self.n_tx):
+                objective.SetCoefficient(x[i][j], scores[i][j])
         objective.SetMaximization()
 
         # Solving
         if solver.Solve() == pywraplp.Solver.OPTIMAL:
             rtn = []
-            for j in range(self.num_uavs):
-                rtn.append([i for i in range(self.num_gus) if x[i][j].solution_value() > 0.5])
-            coverage = sum([len(x) for x in rtn]) / self.num_gus
+            for j in range(self.n_tx):
+                rtn.append([i for i in range(self.n_rx) if x[i][j].solution_value() > 0.5])
+            coverage = sum([len(x) for x in rtn]) / self.n_rx
             return rtn, objective.Value(), coverage
         else:
             raise ValueError("The model doesn't converge for this input")
 
 
 class UAV():
-    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0, num_channels=50):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -571,6 +592,7 @@ class UAV():
             com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both at the same time?
             rotor_area (float): the total area of the UAV's rotors, in square meters
             signal_power (float): the transmitter/receiver power of the UAV, in watts
+            num_channels (int): the number of communication channels the UAV has, equal to the number of Ground Users it can support
         """
         self.id = id
         self.mass = mass
@@ -582,6 +604,7 @@ class UAV():
         self.bandwidth = bandwidth
         self.rotor_area = rotor_area
         self.signal_power = signal_power
+        self.num_channels = num_channels
         self.device = None  # Initialized later
         
     
@@ -714,7 +737,7 @@ class UAV():
             
 
 class GroundUser():
-    def __init__(self, id, positions, intitial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3)):
+    def __init__(self, id, positions, initial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3)):
         """
         Creates a new ground user with the specified parameters
 
@@ -724,14 +747,16 @@ class GroundUser():
             initial_velocity (float): the velocity of the ground user at time zero
             height (float): the height of the ground user in meters
             bandwidth (float): the bandwidth of the ground user's device, in Mbps
+            desired_throughput (np.array(*)): the desired throughput of the user at each time step, in Mbps
             com_type (str): either "transmitter" or "receiver" denotes the type of the ground user
+            delta_t (float): the absolute time between each time step, in seconds
+            color (np.array(3,)): the color of the UAV displayed in the visualize function, expressed as RGB values in [0, 1]
         """
 
         self.id = id
         # TODO: Check the time gap for the data from SUMO, and ensure that this time series is accurate
         self.positions = positions
-        self.pos = self.positions[0]
-        self.vel = intitial_velocity
+        self.initial_velocity = initial_velocity
         self.step = 0
         self.height = height
         self.bandwidth = bandwidth
@@ -751,5 +776,28 @@ class GroundUser():
         self.step += 1
         if self.step >= len(self.positions):
             raise ValueError(f'No more positions to update for Ground User: {self.id}')
-        self.vel = (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
-        self.pos = self.positions[self.step]
+        if self.step >= len(self.throughput):
+            raise ValueError(f'No more throughput values to update for Ground User: {self.id}')
+
+
+    def getPosition(self):
+        """
+        Gets the current position of the Ground User
+
+        Returns:
+            float: the current position of the Ground User, in m
+        """
+        return self.positions[self.step]
+
+    
+    def getVelocity(self):
+        """
+        Gets the current velocity of the Ground User
+
+        Returns:
+            float: the current velocity of the Ground User, in m/s
+        """
+        if self.step == 0:
+            return self.initial_velocity
+        else:
+            return (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
