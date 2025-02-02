@@ -313,7 +313,7 @@ class Environment():
         """
     
 
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0):
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0, num_channels=50):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -327,11 +327,12 @@ class Environment():
             bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
             rotor_area (float): the area of the UAV's rotors, in m^2
             signal_power (float): the transmitter/receiver power of the UAV, in watts
+            num_channels (int): the number of channels the UAV has for communication, equal to the number of Ground Users it can support
         """
         if rotor_area is None:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, num_channels)
         else:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power)
+            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, num_channels)
 
         if self.ped_rx:
             self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
@@ -776,8 +777,6 @@ class GroundUser():
         self.step += 1
         if self.step >= len(self.positions):
             raise ValueError(f'No more positions to update for Ground User: {self.id}')
-        if self.step >= len(self.throughput):
-            raise ValueError(f'No more throughput values to update for Ground User: {self.id}')
 
 
     def getPosition(self):
