@@ -1,4 +1,6 @@
 # RL-AERPAW-DT
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map.](rx_assignment_demonstration.gif)
+
 Reinforcement Learning Pipeline over AERPAW UAV Digital Twin.
 
 ## Goals
