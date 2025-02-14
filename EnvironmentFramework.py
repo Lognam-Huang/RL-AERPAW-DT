@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
-from ortools.linear_solver import pywraplp
+from ortools.sat.python import cp_model
 from sionna.rt import Antenna, AntennaArray
 from sionna.rt import Transmitter, Receiver
 
@@ -527,58 +527,84 @@ class Environment():
         return np.array(rtn)
     
 
-    def assignGUs(self, scores):
+    def assign_gus(self, path_qualities, alpha=0.5, beta=0.5):
         """
         Args:
-        scores (np.array(num_rx, num_tx)): An array of path qualities, should be theoretical maximum throughput values in bit/sec, dtype should be np.float64
-
+            path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
+            alpha (float): Optimization coefficient for the throughput maximization objective.
+            beta (float): Optimization coefficient for the minimum number of GUs per UAV objective.
+        
         Returns:
-            tuple(list(num_tx, num_rx_assigned), float, float): A tuple where the first value is a list of the indices of the ground users assigned to each UAV,
-            the second value is the total path quality of assigned connections,
-            the third value is the coverage percentage, the proportion of GUs serviced by the UAVs
+            assignments (list(list(int))): assignments[i] contains the list of GUs assigned to UAV i.
+            total_throughput (int): The total theoretical maximum throughput of all UAV-GU connections.
         """
 
-        solver = pywraplp.Solver.CreateSolver('GLOP')
+        # Creating data arrays from environment data
+        capacities = np.array([x.throughput_capacity for x in self.uavs.values()], dtype=np.int64)
+        desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
+
+        # Ensuring path quality values are integers, necessary for the solver
+        try:
+            path_qualities = path_qualities.astype(np.int64)
+        except ValueError:
+            raise ValueError("Input data must be of integer type or broadcastable.")
+
+        model = cp_model.CpModel()
+        gus = range(self.n_rx)
+        uavs = range(self.n_tx)
         
-        # Create variables
         x = []
-        for i in range(self.n_rx):
-            row = []
-            for j in range(self.n_tx):
-
-                row.append(solver.IntVar(0, 1, ""))
-            x.append(row)
+        for i in gus:
+            x.append([])
+            for j in uavs:
+                x[i].append(model.NewBoolVar(""))
         x = np.array(x)
-        capacities = np.array([x.num_channels for x in self.uavs.values()])
 
-        # Constraints: Each task assigned to at most one agent
-        for i in range(self.n_rx):
-            solver.Add(np.sum(x[i]) <= 1)
-            
-        # Constraints: UAV j has at most capacities[j] connections
-        for j in range(self.n_tx):
-            solver.Add(np.sum(x[:, j]) <= capacities[j])
+        # Assigning each gu to at most one uav
+        for i in gus:
+            model.Add(np.sum(x[i, :]) <= 1)
 
-        # Adding objective
-        objective = solver.Objective()
-        for i in range(self.n_rx):
-            for j in range(self.n_tx):
-                objective.SetCoefficient(x[i][j], scores[i][j])
-        objective.SetMaximization()
+        # Ensuring each uav's assigned gus do not exceed its total capacity
+        for j in uavs:
+            model.Add(np.dot(desired_throughputs, x[:, j]) <= capacities[j])
+
+        # Defining the task counts for each uav
+        assignment_counts = np.array([model.NewIntVar(0, self.n_rx, "") for j in uavs])
+        for j in uavs:
+            model.Add(assignment_counts[j] == np.sum(x[:, j]))
+
+        # Defining the minimum number of gus across all uavs
+        min_gus = model.NewIntVar(0, self.n_rx, "")
+        for j in uavs:
+            model.Add(assignment_counts[j] >= min_gus)
+
+        # Maximizing the combined objective
+        model.Maximize(np.sum(path_qualities * x) * alpha + min_gus * beta)
 
         # Solving
-        if solver.Solve() == pywraplp.Solver.OPTIMAL:
-            rtn = []
-            for j in range(self.n_tx):
-                rtn.append([i for i in range(self.n_rx) if x[i][j].solution_value() > 0.5])
-            coverage = sum([len(x) for x in rtn]) / self.n_rx
-            return rtn, objective.Value(), coverage
-        else:
-            raise ValueError("The model doesn't converge for this input")
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        # If the model failed to solve the problem
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            raise ValueError("Input is unsolvable or infeasible.")
+
+        # Getting uav assignments
+        assignments = []
+        for j in uavs:
+            assignments.append([])
+            for i in gus:
+                if solver.Value(x[i][j]):
+                    assignments[j].append(i)
+
+        # Undoing objective function to find the total throughput
+        total_throughput = (solver.ObjectiveValue() - solver.Value(min_gus) * beta) / alpha
+
+        return assignments, total_throughput
 
 
 class UAV():
-    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0, num_channels=50):
+    def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0, throughput_capacity=625000000):
         """
         Creates a new UAV object with the specified physical and communication parameters
 
@@ -593,7 +619,8 @@ class UAV():
             com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both at the same time?
             rotor_area (float): the total area of the UAV's rotors, in square meters
             signal_power (float): the transmitter/receiver power of the UAV, in watts
-            num_channels (int): the number of communication channels the UAV has, equal to the number of Ground Users it can support
+            throughput_capacity (int): the throughput capacity of the UAV, in bytes per second, rounded to the nearest integer
+            defaults to 625,000,000 bytes per second, or 5 Gbps
         """
         self.id = id
         self.mass = mass
@@ -605,7 +632,7 @@ class UAV():
         self.bandwidth = bandwidth
         self.rotor_area = rotor_area
         self.signal_power = signal_power
-        self.num_channels = num_channels
+        self.throughput_capacity = throughput_capacity
         self.device = None  # Initialized later
         
     
@@ -738,7 +765,7 @@ class UAV():
             
 
 class GroundUser():
-    def __init__(self, id, positions, initial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3)):
+    def __init__(self, id, positions, initial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3), desired_throughputs=np.full(150, 375000)):
         """
         Creates a new ground user with the specified parameters
 
@@ -752,6 +779,8 @@ class GroundUser():
             com_type (str): either "transmitter" or "receiver" denotes the type of the ground user
             delta_t (float): the absolute time between each time step, in seconds
             color (np.array(3,)): the color of the UAV displayed in the visualize function, expressed as RGB values in [0, 1]
+            desired_throughputs (np.array(int)): the desired throughput of the ground user at each time step, in bytes per second rounded to the nearest integer
+            defaults to 375000 bytes per second, or 3 Mbps
         """
 
         self.id = id
@@ -762,6 +791,7 @@ class GroundUser():
         self.height = height
         self.bandwidth = bandwidth
         self.delta_t = delta_t
+        self.desired_throughputs = desired_throughputs
         if com_type == "tx":
             self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0], self.positions[0][1], height], color=color)
         elif com_type == "rx":
@@ -800,3 +830,13 @@ class GroundUser():
             return self.initial_velocity
         else:
             return (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
+    
+
+    def getDesiredThroughput(self):
+        """
+        Gets the desired throughput of the Ground User at the current time step
+
+        Returns:
+            float: the desired throughput of the Ground User, in bytes per second rounded to the nearest integer
+        """
+        return self.desired_throughputs[self.step]
