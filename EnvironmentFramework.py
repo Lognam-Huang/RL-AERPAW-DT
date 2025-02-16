@@ -61,7 +61,7 @@ class Environment():
         self.ped_color = ped_color
         self.n_rx = 0
         self.n_tx = 0
-        self.uavs = {}
+        self.uavs = []
         self.gus = self.createGroundUsers(position_df_path, desired_throughputs)
         self.temperature = temperature
         self.wind = wind_vector
@@ -130,12 +130,12 @@ class Environment():
          specified in UAV params
 
         Args:
-            dict(str, (float, np.array(3,), np.array(3,))): A dictionary of signal power, position, velocity tuples
+            dict(int, (float, np.array(3,), np.array(3,))): A dictionary of signal power, position, velocity tuples
             that describe the new states of all the UAVs. Any uavs without a key in
             uav_positions will remain in place after the step and their signal power will remain constant.
         """
 
-        for x in self.uavs.keys():
+        for x in range(len(self.uavs)):
             if x in uav_params:
                 self.moveAbsUAV(x, uav_params[x][1], uav_params[x][2])
             else:
@@ -155,13 +155,12 @@ class Environment():
             the shortest squared distance between any two uavs, in m
         """
         rtn = math.inf
-        keys = list(self.uavs.keys())
-        for i in range(len(keys)):
-            for j in range(i + 1, len(keys)):
+        for i in range(len(self.uavs)):
+            for j in range(i + 1, len(self.uavs)):
                 rtn = min(rtn, 
-                (self.uavs[keys[i]].pos[0] - self.uavs[keys[j]].pos[0]) ** 2 +
-                (self.uavs[keys[i]].pos[1] - self.uavs[keys[j]].pos[1]) ** 2 +
-                (self.uavs[keys[i]].pos[2] - self.uavs[keys[j]].pos[2]) ** 2)
+                (self.uavs[i].pos[0] - self.uavs[j].pos[0]) ** 2 +
+                (self.uavs[i].pos[1] - self.uavs[j].pos[1]) ** 2 +
+                (self.uavs[i].pos[2] - self.uavs[j].pos[2]) ** 2)
 
         return math.sqrt(rtn)
             
@@ -229,9 +228,9 @@ class Environment():
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.getVelocity() for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs]), np.array([x.getVelocity() for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs]))
         
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
@@ -239,20 +238,12 @@ class Environment():
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
         a = tf.squeeze(a)  # TODO: If I only have one User or UAV in the simulation this is going to cause an error
-        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs.values()], dtype=tf.float32)
+        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
         bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1]), [self.n_rx, self.n_tx])
-        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs.values()], dtype=tf.float32)
+        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs], dtype=tf.float32)
         signal_power = tf.broadcast_to(tf.reshape(signal_power, [1, -1]), [self.n_rx, self.n_tx])
 
         return bandwidth * np.log2(1 + (signal_power * np.abs(a) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth))
-        """
-        # return tf.convert_to_tensor(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth)), axis=2))
-
-        for uav in self.uavs.values():
-            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth)), axis=2))
-        
-        return tf.convert_to_tensor(rtn)
-        """
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -293,9 +284,9 @@ class Environment():
 
         # Check the sampling frequency parameter for the doppler shift
         if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs.values()]), np.array([x.getVelocity() for x in self.gus]))
+            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs]), np.array([x.getVelocity() for x in self.gus]))
         else:
-            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs.values()]))
+            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs]))
         
         a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
         
@@ -303,24 +294,15 @@ class Environment():
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
         a = tf.squeeze(a)
-        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs.values()], dtype=tf.float32)
+        bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
         bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
-        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs.values()], dtype=tf.float32)
+        signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs], dtype=tf.float32)
         signal_power = tf.broadcast_to(tf.reshape(signal_power, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
 
         return tf.math.reduce_sum(bandwidth * np.log2(1 + (signal_power * np.abs(tf.squeeze(a)) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth)), axis=2).numpy().astype(np.float64)
-
-        """
-        rtn = []
-        a = tf.squeeze(a)
-        for uav in self.uavs.values():
-            rtn.append(tf.math.reduce_sum(uav.bandwidth * np.log2(1 + (uav.signal_power * np.abs(a[:, int(uav.id), :]) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * uav.bandwidth))))
-        
-        return tf.convert_to_tensor(rtn)
-        """
     
 
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0, num_channels=50):
+    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -335,11 +317,15 @@ class Environment():
             rotor_area (float): the area of the UAV's rotors, in m^2
             signal_power (float): the transmitter/receiver power of the UAV, in watts
             num_channels (int): the number of channels the UAV has for communication, equal to the number of Ground Users it can support
+        
+        Returns:
+            (int) the id of the created UAV
         """
+
         if rotor_area is None:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, num_channels)
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, throughput_capacity))
         else:
-            self.uavs[id] = UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, num_channels)
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, throughput_capacity))
 
         if self.ped_rx:
             self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
@@ -349,6 +335,7 @@ class Environment():
             self.n_rx += 1
         
         self.scene.add(self.uavs[id].device)
+        return len(self.uavs) - 1
 
 
     def setUAVSignalPower(self, id, power):
@@ -397,7 +384,7 @@ class Environment():
         Gets the UAV position by Id
 
         Args:
-            id (str): the unique id of the UAV
+            id (int): the unique id of the UAV
 
         Returns:
             np.array(3,): the position vector of the UAV
@@ -410,7 +397,7 @@ class Environment():
         Gets the absolute velocity of the UAV by Id
 
         Args:
-            id (str): the unique id of the UAV
+            id (int): the unique id of the UAV
         
         Returns:
             np.array(3,): the absolute velocity of the UAV
@@ -423,7 +410,7 @@ class Environment():
         Gets the power consumption of the specified UAV, in joules
 
         Args:
-            id (str): the unique id of the UAV
+            id (int): the unique id of the UAV
 
         Returns:
             float: the consumption of the specified UAV, in joules
@@ -437,11 +424,11 @@ class Environment():
         currently in the simulation
 
         Returns:
-            dict(str, float): A dictionary of all the id, consumption pairs for all uavs
+            dict(int, float): A dictionary of all the id, consumption pairs for all uavs
         """
 
         rtn = {}
-        for x in self.uavs.keys():
+        for x in range(len(self.uavs)):
             rtn[x] = self.getUAVConsumption(x)
         return rtn
 
@@ -483,7 +470,7 @@ class Environment():
             length (float): the length of the normalized velocity vectors, None if not normalized
         """
         axis = plt.figure().add_subplot(projection='3d')
-        for uav in self.uavs.values():
+        for uav in self.uavs:
             c = np.random.rand(3)
             axis.scatter(uav.pos[0], uav.pos[1], uav.pos[2], color=c)
             if not np.array_equal(uav.vel, np.zeros(3)):
@@ -547,7 +534,7 @@ class Environment():
         """
 
         # Creating data arrays from environment data
-        capacities = np.array([x.throughput_capacity for x in self.uavs.values()], dtype=np.int64)
+        capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
         desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
 
         # Ensuring path quality values are integers, necessary for the solver
@@ -744,31 +731,6 @@ class UAV():
             float: the UAV's total power consumption thus far
         """
         return self.consumption
-    
-
-    # TODO: Deprecated and likely useless for future applications
-    def computeDistance(self, bezier, time_accuracy=0.001):
-        """
-        Computes the shortest distance between the uav and any objects in the scene.
-        This does not account for other UAVs or pedestrians. That should be done using the
-        computeShortestDistance function
-
-        Args:
-            bezier (np.array(3,4)): the bezier parameters that define the movement curve
-            time_sensitivity (float): The desired accuracy for the time at which the UAV is closest to a building
-
-        Returns:
-            (float): the closest distance from the UAV to a building, in meters 
-        """
-
-        left = 0
-        right = self.delta_t
-        while right - left > time_accuracy:
-            t1 = (2 * left + right) / 3
-            t2 = (left + 2 * right) / 3
-
-            # Compute distance at p(t1, bezier) and p(t2, bezier)
-            # Update the parameters of the ternary search
             
 
 class GroundUser():
