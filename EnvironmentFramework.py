@@ -37,7 +37,7 @@ Perhaps the SNR is not dependent on the path itself though and could
 be thought of as constant, as a hyperparameter of the simulation.
 """
 class Environment():
-    def __init__(self, scene_path, position_df_path, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3), temperature=290):
+    def __init__(self, scene_path, position_df_path, desired_throughputs=None, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3), temperature=290):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -62,7 +62,7 @@ class Environment():
         self.n_rx = 0
         self.n_tx = 0
         self.uavs = {}
-        self.gus = self.createGroundUsers(position_df_path)
+        self.gus = self.createGroundUsers(position_df_path, desired_throughputs)
         self.temperature = temperature
         self.wind = wind_vector
         # This is used to speed up computation later in the simulation
@@ -74,13 +74,14 @@ class Environment():
         ]))
 
 
-    def createGroundUsers(self, position_df_path):
+    def createGroundUsers(self, position_df_path, desired_throughputs=None):
         """
         Parses the positions data from SUMO and creates a list of ground user objects
         Also initializes the inital positions with receivers or transmitters
 
         Args:
             position_df_path (str): the file path to the pedestrian position dataframe
+            desired_throughputs (np.array(num_gus, num_time_steps)): the desired throughput time series for each ground user, in bits per second
         
         Returns:
             np.array(): a list of ground user objects
@@ -96,11 +97,17 @@ class Environment():
         # Creating the ground users
         rtn = []
         for j in range(len(res)):
+            if desired_throughputs is None:
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                                      delta_t=self.time_step, color=self.ped_color))
+            else:
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                                      delta_t=self.time_step, color=self.ped_color, desired_throughputs=desired_throughputs[j]))
             if self.ped_rx:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="rx", delta_t=self.time_step, color=self.ped_color))
                 self.n_rx += 1
             else:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), self.ped_height)]).T, height=self.ped_height, com_type="tx", delta_t=self.time_step, color=self.ped_color))
                 self.n_tx += 1
             self.scene.add(rtn[j].device)
                 
@@ -527,7 +534,7 @@ class Environment():
         return np.array(rtn)
     
 
-    def assign_gus(self, path_qualities, alpha=0.5, beta=0.5):
+    def assignGUs(self, path_qualities, alpha=0.5, beta=0.5):
         """
         Args:
             path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
@@ -765,7 +772,7 @@ class UAV():
             
 
 class GroundUser():
-    def __init__(self, id, positions, initial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="tx", delta_t=1, color=np.zeros(3), desired_throughputs=np.full(150, 375000)):
+    def __init__(self, id, positions, initial_velocity=np.zeros(3,), height=1.5, bandwidth=50, com_type="rx", delta_t=1, color=np.zeros(3), desired_throughputs=np.full(150, 375000)):
         """
         Creates a new ground user with the specified parameters
 
@@ -775,7 +782,6 @@ class GroundUser():
             initial_velocity (float): the velocity of the ground user at time zero
             height (float): the height of the ground user in meters
             bandwidth (float): the bandwidth of the ground user's device, in Mbps
-            desired_throughput (np.array(*)): the desired throughput of the user at each time step, in Mbps
             com_type (str): either "transmitter" or "receiver" denotes the type of the ground user
             delta_t (float): the absolute time between each time step, in seconds
             color (np.array(3,)): the color of the UAV displayed in the visualize function, expressed as RGB values in [0, 1]
@@ -784,7 +790,6 @@ class GroundUser():
         """
 
         self.id = id
-        # TODO: Check the time gap for the data from SUMO, and ensure that this time series is accurate
         self.positions = positions
         self.initial_velocity = initial_velocity
         self.step = 0
@@ -807,6 +812,8 @@ class GroundUser():
         self.step += 1
         if self.step >= len(self.positions):
             raise ValueError(f'No more positions to update for Ground User: {self.id}')
+        if self.step >= len(self.desired_throughputs):
+            raise ValueError(f'No more desired throughputs to update for Ground User: {self.id}')
 
 
     def getPosition(self):
