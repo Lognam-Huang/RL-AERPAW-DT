@@ -1,7 +1,15 @@
 # RL-AERPAW-DT
+## A UAV Digital Twin for Communications Optimization Reinforcement Learning
+
+## UAV Assignment Load Balancing Demonstration
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.]
+
+The GIF above shows the evolution of the coverage map (top), the UAV Assignments (bottom left), the Total Theoretical Maximum Data Rate across all UAV-GroundUser connection (bottom middle), and the power consumption of each UAV (bottom right).
+
+## UAV Assignment without Load Balancing Demonstration
 ![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map.](rx_assignment_demonstration.gif)
 
-Reinforcement Learning Pipeline over AERPAW UAV Digital Twin.
+The GIF above shows the same evolution, without the load balacing optimization. From this, we can see that the Ground Users are more dispersed in their assignments, and that there is a greater overall coverage.
 
 ## Goals
 - Construct a pipeline for the simulation of pedestrian data using SUMO
