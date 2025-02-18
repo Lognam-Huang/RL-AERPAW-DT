@@ -2,7 +2,7 @@
 ## A UAV Digital Twin for Communications Optimization Reinforcement Learning
 
 ## UAV Assignment Load Balancing Demonstration
-![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.]
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](load_balancing_demonstration_gif_2-17-25.gif)
 
 The GIF above shows the evolution of the coverage map (top), the UAV Assignments (bottom left), the Total Theoretical Maximum Data Rate across all UAV-GroundUser connection (bottom middle), and the power consumption of each UAV (bottom right).
 
