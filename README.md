@@ -1,5 +1,5 @@
 # RL-AERPAW-DT
-## A UAV Digital Twin for Communications Optimization Reinforcement Learning
+## A UAV Digital Twin for Communication Optimization with Reinforcement Learning
 
 ## UAV Assignment Load Balancing Demonstration
 ![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](load_balancing_demonstration_gif_2-17-25.gif)
