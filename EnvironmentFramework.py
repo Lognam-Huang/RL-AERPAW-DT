@@ -521,7 +521,7 @@ class Environment():
         return np.array(rtn)
     
 
-    def assignGUs(self, path_qualities, alpha=0.5, beta=0.5):
+    def assignGUsByCount(self, path_qualities, alpha=1, beta=1):
         """
         Args:
             path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
@@ -593,6 +593,82 @@ class Environment():
 
         # Undoing objective function to find the total throughput
         total_throughput = (solver.ObjectiveValue() - solver.Value(min_gus) * beta) / alpha
+
+        return assignments, total_throughput
+
+    
+    def assignGUsByThroughputWaste(self, path_qualities, alpha=1, beta=1):
+        """
+        Args:
+            path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
+            alpha (float): Optimization coefficient for the throughput maximization objective, should be positive.
+            beta (float): Optimization coefficient for the maximum throughput waste minimization objective, should be positive.
+        
+        Returns:
+            assignments (list(list(int))): assignments[i] contains a list of GUs assigned to UAV i.
+            total_throughput (int): The total theoretical maximum throughput of all UAV-GU connections.
+        """
+
+        # Creating data arrays from environment data
+        capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
+        desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
+
+        # Ensuring path quality values are integers, necessary for the solver
+        try:
+            path_qualities = path_qualities.astype(np.int64)
+        except ValueError:
+            raise ValueError("Input data must be of integer type or broadcastable.")
+
+        model = cp_model.CpModel()
+        gus = range(self.n_rx)
+        uavs = range(self.n_tx)
+        
+        x = []
+        for i in gus:
+            x.append([])
+            for j in uavs:
+                x[i].append(model.NewBoolVar(""))
+        x = np.array(x)
+
+        # Assigning each gu to at most one uav
+        for i in gus:
+            model.Add(np.sum(x[i, :]) <= 1)
+
+        # Ensuring each uav's assigned gus do not exceed its total capacity
+        for j in uavs:
+            model.Add(np.dot(desired_throughputs, x[:, j]) <= capacities[j])
+
+        # Defining the task counts for each uav
+        throughput_wastes = np.array([model.NewIntVar(0, capacities[j], "") for j in uavs])
+        for j in uavs:
+            model.Add(throughput_wastes[j] == capacities[j] - np.sum(x[:, j]))
+
+        # Defining the minimum number of gus across all uavs
+        max_throughput_waste = model.NewIntVar(0, np.max(capacities), "")
+        for j in uavs:
+            model.Add(throughput_wastes[j] <= max_throughput_waste)
+
+        # Maximizing the combined objective
+        model.Maximize(np.sum(path_qualities * x) * alpha - max_throughput_waste * beta)
+
+        # Solving
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        # If the model failed to solve the problem
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            raise ValueError("Input is unsolvable or infeasible.")
+
+        # Getting uav assignments
+        assignments = []
+        for j in uavs:
+            assignments.append([])
+            for i in gus:
+                if solver.Value(x[i][j]):
+                    assignments[j].append(i)
+
+        # Undoing objective function to find the total throughput
+        total_throughput = (solver.ObjectiveValue() + solver.Value(max_throughput_waste) * beta) / alpha
 
         return assignments, total_throughput
 
