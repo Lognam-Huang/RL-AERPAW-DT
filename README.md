@@ -2,7 +2,7 @@
 ## A UAV Digital Twin for Communication Optimization with Reinforcement Learning
 
 ## Case 2: Demonstration of What-if Analysis on Network Performance (Consider both system and user performance)
-![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](gifs/load_balancing_demonstration_gif_2-17-25.gif)
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](gifs/updated_load_balancing_demonstration_gif_2-26-25.gif)
 
 The GIF above shows the evolution of the coverage map (top), the Total Theoretical Maximum Data Rate across all UAV-GroundUser connections (bottom left), the UAV Assignments (bottom middle), and the power consumption of each UAV (bottom right).
 
