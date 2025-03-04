@@ -710,211 +710,67 @@ class Environment():
             assignments (list(list(int))): assignments[i] contains the list of GUs assigned to UAV i.
             total_throughput (int): The total theoretical maximum throughput of all UAV-GU connections.
         """
-
+        print("Starting Model")
         # Creating data arrays from environment data
         capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
         desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
 
         model = cp_model.CpModel()
+        max_power = 5 # Small number for testing
+        # max_power = int(self.uavs[0].battery_capacity / self.time_step)  # We just say for now that every UAV has the same battery capacity
         gu_range = range(self.n_rx)
         uav_range = range(self.n_tx)
+        power_range = range(max_power + 1)
         
-        x = []
-        for i in gu_range:
-            x.append([])
-            for j in uav_range:
-                x[i].append(model.NewBoolVar(""))
-        x = np.array(x)
-
-        # Assigning each gu to at most one uav
-        for i in gu_range:
-            model.Add(np.sum(x[i, :]) <= 1)
-
-        # Ensuring each uav's assigned gus do not exceed its total capacity
-        for j in uav_range:
-            model.Add(np.dot(desired_throughputs, x[:, j]) <= capacities[j])
-
-        # Defining the task counts for each uav
-        throughput_wastes = np.array([model.NewIntVar(0, capacities[j], "") for j in uav_range])
-        for j in uav_range:
-            model.Add(throughput_wastes[j] == capacities[j] - np.sum(x[:, j]))
-
-        # Defining the minimum number of gus across all uavs
-        max_throughput_waste = model.NewIntVar(0, np.max(capacities), "")
-        for j in uav_range:
-            model.Add(throughput_wastes[j] <= max_throughput_waste)
-
-        # Defining the signal power variables for each uav, in milliwatts
-        signal_powers = np.array([model.NewIntVar(0, int(self.uavs[j].battery_capacity / self.time_step), "") for j in uav_range])
-
-        # Defining the tri-objective
-        # Throughput maximization objective
-        bandwidth = np.array([uav.bandwidth for uav in self.uavs], dtype=np.float64)
-        bandwidth = np.broadcast_to(np.reshape(bandwidth, [1, -1, 1]), [self.n_rx, self.n_tx, np.shape(path_qualities)[2]])
-        signal_power = np.broadcast_to(np.reshape(signal_powers, [1, -1, 1]), [self.n_rx, self.n_tx, np.shape(path_qualities)[2]])
-        # Changing the * before the boltzmann constant to a / to look for division errors in cp-model
-
-        tmdrs = bandwidth * self.log2((signal_power * path_qualities ** 2) * (BOLTZMANN_CONSTANT * self.temperature * bandwidth) ** -1)
-        throughput_score = np.sum(np.sum(tmdrs, axis=2).astype(np.int64) * x)
-
-        model.Maximize(alpha * throughput_score - beta * max_throughput_waste - gamma * np.sum(signal_powers) * self.time_step)
-
-        # Solving
-        solver = cp_model.CpSolver()
-        status = solver.Solve(model)
-
-        # If the model failed to solve the problem
-        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            raise ValueError("Input is unsolvable or infeasible.")
-
-        # Getting uav assignments
-        assignments = []
-        for j in uav_range:
-            assignments.append([])
-            for i in gu_range:
-                if solver.Value(x[i][j]):
-                    assignments[j].append(i)
-        
-        # Reflexively updating the signal_powers of the UAVs
-        # This is not actually used for the computation, but is important for consistency
-        for j in uav_range:
-            self.uavs[j].signal_power = solver.Value(signal_powers[j])
-
-        # Undoing objective function to find the total throughput
-        total_throughput = (solver.ObjectiveValue() + solver.Value(max_throughput_waste) * beta) / alpha
-
-        return assignments, total_throughput
-
-
-    def assignGUsWithTriObjectiveDeepSeek(self, path_qualities, alpha=1, beta=1, gamma=1):
-        capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
-        desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
-        
-        model = cp_model.CpModel()
-        gu_range = range(self.n_rx)
-        uav_range = range(self.n_tx)
-        
-        # Precompute constants for the log terms
-        bandwidth = np.array([uav.bandwidth for uav in self.uavs], dtype=np.float64)
-        N0 = BOLTZMANN_CONSTANT * self.temperature
-        D = np.zeros((self.n_rx, self.n_tx))
+        # Computing rmax array
+        rmax = np.zeros((self.n_rx, self.n_tx, max_power + 1), dtype=np.int64)
+        N0 = 1 / (BOLTZMANN_CONSTANT * self.temperature)
         for i in gu_range:
             for j in uav_range:
-                c = 1 + (path_qualities[i, j, :] ** 2) / (N0 * bandwidth[j])
-                D[i, j] = np.sum(np.log2(c))  # Sum over paths k
-        
-        # For each UAV j, possible signal_power values
-        signal_power_options = []
-        for j in uav_range:
-            max_power = 5  # Small number for testing
-            # max_power = int(self.uavs[j].battery_capacity / self.time_step)
-            options = list(range(max_power + 1))  # Include 0 for no signal power, UAV shutoff
-            signal_power_options.append(options)
-        
-        # Variables
-        x = np.array([[model.NewBoolVar("") for j in uav_range] for i in gu_range])
-        y = []  # y[j][s] is 1 if UAV j uses signal_power s
-        z = {}  # z[i,j,s] = x[i,j] * y[j][s]
-        for j in uav_range:
-            options = signal_power_options[j]
-            yj = [model.NewBoolVar(f"y_{j}_{s}") for s in options]
-            model.AddExactlyOne(yj)
-            y.append(yj)
-            for i in gu_range:
-                for idx, s in enumerate(options):
-                    zijs = model.NewBoolVar(f"z_{i}_{j}_{s}")
-                    model.Add(zijs <= x[i][j])
-                    model.Add(zijs <= yj[idx])
-                    model.Add(zijs >= x[i][j] + yj[idx] - 1)
-                    z[(i, j, s)] = zijs
-        
-        # Constraint for each GU to at most one UAV
+                for k in power_range:
+                    rmax[i][j][k] = int(self.uavs[j].bandwidth * np.sum(np.log2(1 + N0 * k * path_qualities[i, j, :] ** 2 / self.uavs[j].bandwidth)))
+
+        # 1 if GU[i] is assigned to uav[j] at level power[k] 
+        z = np.array([[[model.NewBoolVar("") for k in power_range] for j in uav_range] for i in gu_range])
+
+        # At most one assignment contraint, also enforces the power level constraint
         for i in gu_range:
-            model.Add(np.sum(x[i, :]) <= 1)
+            model.Add(np.sum(z[i, :, :]) <= 1)
 
         # Constraint for desired_throughput limit
         for j in uav_range:
-            model.Add(np.dot(desired_throughputs, x[:, j]) <= capacities[j])
-        
-        # Throughput waste variables
-        throughput_wastes = [model.NewIntVar(0, capacities[j], "") for j in uav_range]
+            model.Add(sum(np.dot(desired_throughputs, z[:, j, k]) for k in power_range) <= capacities[j])
+
+        # Minimum throughput assignment constraints
+        throughput_wastes = np.array([model.NewIntVar(0, capacities[j], "") for j in uav_range])
         for j in uav_range:
-            # Refactor this to use numpy
-            model.Add(throughput_wastes[j] == capacities[j] - np.dot(desired_throughputs, x[:, j]))
+            model.Add(throughput_wastes[j] == capacities[j] - np.sum(rmax[:, j, :] * z[:, j, :]))
         
         max_throughput_waste = model.NewIntVar(0, max(capacities), "")
         for j in uav_range:
             model.Add(throughput_wastes[j] <= max_throughput_waste)
-        
-        # Objective components
-        throughput_linear = sum(
-            bandwidth[j] * D[i, j] * x[i][j]
-            for i in gu_range for j in uav_range
-        )
-        
-        K = path_qualities.shape[2]  # Number of paths per GU-UAV pair
-        throughput_log_terms = []
-        for j in uav_range:
-            options = signal_power_options[j]
-            for s in options:
-                log_s = np.log2(s)
-                term = bandwidth[j] * K * log_s * sum(
-                    z[(i, j, s)] for i in gu_range
-                )
-                throughput_log_terms.append(term)
-        
-        throughput_score = throughput_linear + sum(throughput_log_terms)
-        
-        signal_power_sum = sum(
-            s * y[j][idx]
-            for j in uav_range for idx, s in enumerate(signal_power_options[j])
-        )
-        
-        model.Maximize(
-            alpha * throughput_score -
-            beta * max_throughput_waste -
-            gamma * signal_power_sum * self.time_step
-        )
-        
-        # Solve and process solution as before
+
+        # Adding maximizer
+        coefficient = np.array([k for k in power_range])
+        model.Maximize(alpha * np.sum(rmax * z) - beta * max_throughput_waste - gamma * np.dot(coefficient, z[i, j, :]))
+
+        # Solving the model
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
-        
-        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            raise ValueError("Input is unsolvable or infeasible.")
-        
-        assignments = []
-        for j in uav_range:
-            assignments.append([i for i in gu_range if solver.Value(x[i][j])])
-        
-        # Update UAVs' signal_powers based on y[j][s]
-        for j in uav_range:
-            for idx, s in enumerate(signal_power_options[j]):
-                if solver.Value(y[j][idx]):
-                    self.uavs[j].signal_power = s
-                    break
-        
-        total_throughput = (solver.ObjectiveValue() + beta * solver.Value(max_throughput_waste)) / alpha
-        
-        return assignments, total_throughput
 
+        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            print("Model Success")
 
-    def log2(self, x, iterations=100):
-        """
-        Computes log2(1 + x) for any x > -1 using the taylor expansion
-
-        Args:
-            x (float): the value x to compute log2(1 + x) for
-            iterations (int): the number of iterations to compute the taylor expansion
-
-        Returns:
-            float: log2(1 + x)
-        """
-
-        rtn = 0
-        for i in range(1, iterations):
-            rtn += (-1) ** (i + 1) * (x ** i) / i
-        return rtn
+        assignments = [[] for j in uav_range]
+        for i in gu_range:
+            for j in uav_range:
+                for k in power_range:
+                    if solver.Value(z[i, j, k]):
+                        assignments[j].append(i)
+        
+        objective = solver.ObjectiveValue()
+        
+        return assignments, objective
         
 
 class UAV():
