@@ -19,12 +19,12 @@ The two GIFs below show the evolution of the simulated digital twin environment 
 Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load of the UAVs to balance the loads. Importantly, the distribution of UAV loads is slightly more consistent but lower overall than the pure throughput optimization. Furthermore, the distribution of assigned users in incredibly consistent, likely beyond what would be required of an actual simulation. This shows that taking a throughput-focused route is much more effective at balancing UAV loads than a user-count method.
 
 ### Case 2: Demonstration of What-If Analysis on Network Performance (Consider UAV GU Count Loads and Actual Data Rate)
-![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](gifs/0_assignGUs.gif)
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](gifs/1_assignGUsWithLoadBalancing.gif)
 
 Case 2 showcases another bi-objective algorithm that seeks to balance the cumulative actual data rate while including a load-balancing compensation. This algorithm attempts to maximize the minimum number of Ground Users assigned to any UAV. Because the total number of GUs is bounded, this results in a more equal distribution of network load. We can see from this demonstration that the total coverage, meaning the percentage of GUs assigned to a UAV, is almost always 100%. Furthermore, the variance in the load for each UAV is stable compared to Case 1. Finally, the acutal data rate is relatively unaffected by the change, meaning that we gain load-balancing without losing communication rate.
 
 ### Case 1: Demonstration of What-If Analysis on Network Performance (Prioritize Actual Data Rate)
-![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map.](gifs/1_assignGUsWithLoadBalancing.gif)
+![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map.](gifs/0_assignGUs.gif)
 
 Case 1 shows a basic throughput maximization algorithm to assign the Ground Users. It uses a Constraint-Programming Solver from Google OR-Tools to optimize a linear integer constraint problem. Case 1 shows that the actual data rate is high, but the number of assignments is incredibly variable and unstable over time, which Case 1 attempts to fix.
 
