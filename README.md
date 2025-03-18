@@ -2,7 +2,7 @@
 ## A UAV Digital Twin for Communication Optimization with Reinforcement Learning
 
 ## Research Poster
-![A research poster updated on March 18th, 2025](presentations/research_poster_final.pdf)
+![A research poster updated on March 18th, 2025](presentations/research_poster_final_img.jpg)
 This research poster was presented at the Goodnight Research Symposium at NC State on March 18th, 2025.
 
 ## Case 2: Demonstration of What-if Analysis on Network Performance (Consider both system and user performance)
