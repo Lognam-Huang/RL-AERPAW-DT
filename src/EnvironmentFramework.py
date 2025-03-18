@@ -545,9 +545,104 @@ class Environment():
 
         return np.array(rtn)
     
+    
+    # TODO: Delete, likely deprecated
+    def getDataRateFromAssignments(self, assignments, path_qualities):
+        """
+        Computes the data rate for each UAV with the given assignments and path qualities, this is the theoretical, not actual
+
+        Args:
+            assignments (list(list(int))): assignments[i] contains a list of GUs assigned to UAV i.
+            path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
+
+        Returns:
+            np.array(num_tx + 1): The data rates of each transmitter, plus the sum of all the data rates  
+        """
+
+        rtn = np.zeros(self.n_tx + 1, dtype=np.int64)
+
+        for i in range(self.n_tx):
+            for j in assignments[i]:
+                rtn[i] += path_qualities[j][i]
+        rtn[-1] = np.sum(rtn)  # The last value is zero, so we just sum all of them
+        return rtn
+
+
+    def assignGUs(self, path_qualities):
+        """
+        Assigns the ground users by prioritizing the total throughput between all UAV-GU connections and ensuring that each
+        ground user is assigned to at most one UAV. We assume that the UAV data rate exactly matches the sum of the desired
+        throughputs of their assigned ground users. Then we backcalculate signal power to make it work out.
+
+        Args:
+            path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
+        
+        Returns:
+            assignments (list(list(int))): assignments[i] contains the list of GUs assigned to UAV i.
+            data_rates (list(int)): The data rates of each transmitter, plus the sum of all the data rates. Has length n_tx + 1.
+        """
+
+        # Creating data arrays from environment data
+        capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
+        desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
+
+        # Ensuring path quality values are integers, necessary for the solver
+        try:
+            path_qualities = path_qualities.astype(np.int64)
+        except ValueError:
+            raise ValueError("Input data must be of integer type or broadcastable.")
+
+        model = cp_model.CpModel()
+        gus = range(self.n_rx)
+        uavs = range(self.n_tx)
+        
+        x = []
+        for i in gus:
+            x.append([])
+            for j in uavs:
+                x[i].append(model.NewBoolVar(""))
+        x = np.array(x)
+
+        # Assigning each gu to at most one uav
+        for i in gus:
+            model.Add(np.sum(x[i, :]) <= 1)
+
+        # Ensuring each uav's assigned gus do not exceed its total capacity
+        for j in uavs:
+            model.Add(np.dot(desired_throughputs, x[:, j]) <= capacities[j])
+
+        # Setting the objective and solving
+        model.Maximize(np.sum(path_qualities * x))
+        solver = cp_model.CpSolver()
+        status = solver.Solve(model)
+
+        # If the model failed to solve the problem
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            raise ValueError("Input is unsolvable or infeasible.")
+
+        # Getting uav assignments
+        assignments = []
+        for j in uavs:
+            assignments.append([])
+            for i in gus:
+                if solver.Value(x[i][j]):
+                    assignments[j].append(i)
+
+        # Generating the data rates for each UAV, taking the min of path qualities and desired_throughput
+        data_rates = np.zeros(self.n_tx + 1, dtype=np.int64)
+        for i in range(self.n_tx):
+            for j in assignments[i]:
+                data_rates[i] += min(desired_throughputs[j], path_qualities[j][i])
+        data_rates[-1] = np.sum(data_rates[:-1])
+
+        return assignments, data_rates
+
 
     def assignGUsByCount(self, path_qualities, alpha=1, beta=1):
         """
+        Assigns the ground users by maximizing the total throughput objective as well as load balancing by the number of GUs assigned
+        to each UAV.
+
         Args:
             path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
             alpha (float): Optimization coefficient for the throughput maximization objective.
@@ -616,16 +711,21 @@ class Environment():
                 if solver.Value(x[i][j]):
                     assignments[j].append(i)
 
-        # Undoing objective function to find the total throughput
-        total_throughput = (solver.ObjectiveValue() - solver.Value(min_gus) * beta) / alpha
+        ## Generating the data rates for each UAV, taking the min of path qualities and desired_throughput
+        data_rates = np.zeros(self.n_tx + 1, dtype=np.int64)
+        for i in range(self.n_tx):
+            for j in assignments[i]:
+                data_rates[i] += min(desired_throughputs[j], path_qualities[j][i])
+        data_rates[-1] = np.sum(data_rates[:-1])
 
-        return assignments, total_throughput
+        return assignments, data_rates
 
     
-    def assignGUsByThroughputWaste(self, path_qualities, alpha=1, beta=1):
+    def assignGUsByThroughputWaste(self, path_qualities, scale=1, alpha=1, beta=1):
         """
         Args:
             path_qualities (np.array(int)): Theoretical maximum throughput value between each ground user and UAV.
+            scale (int): scales down the input data to make the computation more efficient, should be positive
             alpha (float): Optimization coefficient for the throughput maximization objective, should be positive.
             beta (float): Optimization coefficient for the maximum throughput waste minimization objective, should be positive.
         
@@ -643,6 +743,11 @@ class Environment():
             path_qualities = path_qualities.astype(np.int64)
         except ValueError:
             raise ValueError("Input data must be of integer type or broadcastable.")
+        
+        if scale > 1:
+            path_qualities = np.floor(path_qualities / scale).astype(np.int64)
+            capacities = np.floor(capacities / scale).astype(np.int64)
+            desired_throughputs = np.floor(desired_throughputs / scale).astype(np.int64)
 
         model = cp_model.CpModel()
         gus = range(self.n_rx)
@@ -692,35 +797,43 @@ class Environment():
                 if solver.Value(x[i][j]):
                     assignments[j].append(i)
 
-        # Undoing objective function to find the total throughput
-        total_throughput = (solver.ObjectiveValue() + solver.Value(max_throughput_waste) * beta) / alpha
+        ## Generating the data rates for each UAV, taking the min of path qualities and desired_throughput
+        data_rates = np.zeros(self.n_tx + 1, dtype=np.int64)
+        for i in range(self.n_tx):
+            for j in assignments[i]:
+                data_rates[i] += min(desired_throughputs[j], path_qualities[j][i])
+        data_rates[-1] = np.sum(data_rates[:-1])
 
-        return assignments, total_throughput
+        return assignments, data_rates * scale
 
 
-    def assignGUsWithTriObjective(self, path_qualities, alpha=1, beta=1, gamma=1):
+    def assignGUsWithTriObjective(self, path_coefficients, scale=1, alpha=0.1, beta=1, gamma=100, max_power=5):
         """
         Args:
-            path_qualities (np.array(num_rx, num_tx, max_num_paths)): Path quality values for all paths between each UAV-Ground User pair, can be floats
+            path_coefficients (np.array(num_rx, num_tx, max_num_paths)): Path quality values for all paths between each UAV-Ground User pair, can be floats
+            scale (int): scales down the input data to make the computation more efficient, should be positive
             alpha (float): Optimization coefficient for the throughput maximization objective.
             beta (float): Optimization coefficient for the minimum assigned throughput objective.
             gamma (float): Optimization coefficient for the power consumption minimization objective.
+            max_power (int): The maximum power to consider in the optimization, in watts
         
         Returns:
             assignments (list(list(int))): assignments[i] contains the list of GUs assigned to UAV i.
             total_throughput (int): The total theoretical maximum throughput of all UAV-GU connections.
         """
-        print("Starting Model")
         # Creating data arrays from environment data
         capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
         desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
 
+        if scale > 1:
+            path_coefficients = np.floor(path_coefficients / scale).astype(np.int64)
+            capacities = np.floor(capacities / scale).astype(np.int64)
+            desired_throughputs = np.floor(desired_throughputs / scale).astype(np.int64)
+
         model = cp_model.CpModel()
-        max_power = 5 # Small number for testing
-        # max_power = int(self.uavs[0].battery_capacity / self.time_step)  # We just say for now that every UAV has the same battery capacity
         gu_range = range(self.n_rx)
         uav_range = range(self.n_tx)
-        power_range = range(max_power + 1)
+        power_range = range(1, max_power + 1)
         
         # Computing rmax array
         rmax = np.zeros((self.n_rx, self.n_tx, max_power + 1), dtype=np.int64)
@@ -728,7 +841,7 @@ class Environment():
         for i in gu_range:
             for j in uav_range:
                 for k in power_range:
-                    rmax[i][j][k] = int(self.uavs[j].bandwidth * np.sum(np.log2(1 + N0 * k * path_qualities[i, j, :] ** 2 / self.uavs[j].bandwidth)))
+                    rmax[i][j][k] = int(self.uavs[j].bandwidth * np.sum(np.log2(1 + N0 * k * path_coefficients[i, j, :] ** 2 / self.uavs[j].bandwidth)))
 
         # 1 if GU[i] is assigned to uav[j] at level power[k] 
         z = np.array([[[model.NewBoolVar("") for k in power_range] for j in uav_range] for i in gu_range])
@@ -752,14 +865,14 @@ class Environment():
 
         # Adding maximizer
         coefficient = np.array([k for k in power_range])
-        model.Maximize(alpha * np.sum(rmax * z) - beta * max_throughput_waste - gamma * np.dot(coefficient, z[i, j, :]))
+        model.Maximize(alpha * np.sum(rmax * z) - beta * max_throughput_waste - gamma * sum(np.dot(coefficient, z[i, j, :]) for i in gu_range for j in uav_range))
 
         # Solving the model
         solver = cp_model.CpSolver()
         status = solver.Solve(model)
 
-        if status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
-            print("Model Success")
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            raise ValueError("Model doesn't convege for this input")
 
         assignments = [[] for j in uav_range]
         for i in gu_range:
@@ -767,11 +880,15 @@ class Environment():
                 for k in power_range:
                     if solver.Value(z[i, j, k]):
                         assignments[j].append(i)
+
+        throughputs = np.zeros(self.n_tx + 1, dtype=np.int64)
+        for j in uav_range:
+            for uav in assignments[j]:
+                throughputs[j] += solver.Value(sum(rmax[uav, j, :] * z[uav, j, :]))
+        throughputs[-1] = np.sum(throughputs)  # Again we can ignore 0
         
-        objective = solver.ObjectiveValue()
-        
-        return assignments, objective
-        
+        return assignments, throughputs
+
 
 class UAV():
     def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
