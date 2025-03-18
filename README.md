@@ -1,6 +1,10 @@
 # RL-AERPAW-DT
 ## A UAV Digital Twin for Communication Optimization with Reinforcement Learning
 
+## Research Poster
+![A research poster updated on March 18th, 2025](presentations/research_poster_final.pdf)
+This research poster was presented at the Goodnight Research Symposium at NC State on March 18th, 2025.
+
 ## Case 2: Demonstration of What-if Analysis on Network Performance (Consider both system and user performance)
 ![A Demonstration of the simulation showing Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map using an optimized load-balancing algorithm.](gifs/updated_load_balancing_demonstration_gif_2-26-25.gif)
 
