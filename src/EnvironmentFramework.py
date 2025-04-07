@@ -807,7 +807,7 @@ class Environment():
         return assignments, data_rates * scale
 
 
-    def assignGUsWithTriObjective(self, path_coefficients, scale=1, alpha=0.1, beta=1, gamma=100, max_power=5):
+    def assignGUsWithTriObjective(self, path_coefficients, scale=1, alpha=1, beta=0.1, gamma=10, max_power=5):
         """
         Args:
             path_coefficients (np.array(num_rx, num_tx, max_num_paths)): Path quality values for all paths between each UAV-Ground User pair, can be floats
@@ -825,23 +825,23 @@ class Environment():
         capacities = np.array([x.throughput_capacity for x in self.uavs], dtype=np.int64)
         desired_throughputs = np.array([x.getDesiredThroughput() for x in self.gus], dtype=np.int64)
 
-        if scale > 1:
-            path_coefficients = np.floor(path_coefficients / scale).astype(np.int64)
-            capacities = np.floor(capacities / scale).astype(np.int64)
-            desired_throughputs = np.floor(desired_throughputs / scale).astype(np.int64)
-
         model = cp_model.CpModel()
         gu_range = range(self.n_rx)
         uav_range = range(self.n_tx)
         power_range = range(1, max_power + 1)
         
         # Computing rmax array
-        rmax = np.zeros((self.n_rx, self.n_tx, max_power + 1), dtype=np.int64)
+        rmax = np.zeros((self.n_rx, self.n_tx, max_power), dtype=np.int64)
         N0 = 1 / (BOLTZMANN_CONSTANT * self.temperature)
         for i in gu_range:
             for j in uav_range:
                 for k in power_range:
-                    rmax[i][j][k] = int(self.uavs[j].bandwidth * np.sum(np.log2(1 + N0 * k * path_coefficients[i, j, :] ** 2 / self.uavs[j].bandwidth)))
+                    rmax[i][j][k - 1] = int(self.uavs[j].bandwidth * np.sum(np.log2(1 + N0 * k * path_coefficients[i, j, :] ** 2 / self.uavs[j].bandwidth)))
+        
+        if scale > 1:
+            capacities = np.floor(capacities / scale).astype(np.int64)
+            desired_throughputs = np.floor(desired_throughputs / scale).astype(np.int64)
+            rmax = np.floor(rmax / scale).astype(np.int64)
 
         # 1 if GU[i] is assigned to uav[j] at level power[k] 
         z = np.array([[[model.NewBoolVar("") for k in power_range] for j in uav_range] for i in gu_range])
@@ -852,7 +852,7 @@ class Environment():
 
         # Constraint for desired_throughput limit
         for j in uav_range:
-            model.Add(sum(np.dot(desired_throughputs, z[:, j, k]) for k in power_range) <= capacities[j])
+            model.Add(sum(np.dot(desired_throughputs, z[:, j, k - 1]) for k in power_range) <= capacities[j])
 
         # Minimum throughput assignment constraints
         throughput_wastes = np.array([model.NewIntVar(0, capacities[j], "") for j in uav_range])
@@ -878,7 +878,7 @@ class Environment():
         for i in gu_range:
             for j in uav_range:
                 for k in power_range:
-                    if solver.Value(z[i, j, k]):
+                    if solver.Value(z[i, j, k - 1]):
                         assignments[j].append(i)
 
         throughputs = np.zeros(self.n_tx + 1, dtype=np.int64)
@@ -887,7 +887,7 @@ class Environment():
                 throughputs[j] += solver.Value(sum(rmax[uav, j, :] * z[uav, j, :]))
         throughputs[-1] = np.sum(throughputs)  # Again we can ignore 0
         
-        return assignments, throughputs
+        return assignments, throughputs * scale
 
 
 class UAV():
