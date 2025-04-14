@@ -63,6 +63,7 @@ If you have any questions about the simulation environment or need help with set
 ### Acknowledgement
 - Everett Tucker, NCSU
 - Yuchen Liu, NCSU
+- NSF NAIRR Pilot Award
 
 ## Good Luck and Happy Simulating!
 
