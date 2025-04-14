@@ -36,12 +36,23 @@ Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load
 
 ### Advanced Set-Up - Custom Data
 1. Identify your target region by getting the minimum and maximum latitude and longitude coordinates of your bounding box and storing them in the file named bounding_box.txt. This is essential for the data parsing and synchronization of Building and Pedestrian Data.
-2. Import building data as an XML file. There is a great video tutorial [A link to a video tutorial about how to import building data as an XML file](https://www.youtube.com/watch?v=7xHLDxUaQ7c) by a developer from Sionna.
-  * First, you need to download Blender [Link to Blender download](https://www.blender.org/download/), which is an open-source 3D rendering and modeling software. I used Blender 4.2 but you could likely use a more recent version.
-  * Download the Mitsuba Blender Add-On [Link to Mitsuba Blender Add-On](https://github.com/mitsuba-renderer/mitsuba-blender/releases). I used version 0.4.0. Just download the .zip file from their GitHub releases, then follow their installation and update guide [Link to Installation Guide](https://github.com/mitsuba-renderer/mitsuba-blender/wiki/Installation-&-Update-Guide) to include it in Blender. This is used for exporting as an XML.
-  * Download Blosm, [Link to download Blosm](https://prochitecture.gumroad.com/l/blender-osm) which is another Blender add-on for importing data from OpenStreetMaps. You can choose to pay for it on the website, or not. Then, follow these installation instructions [Link to installation instructions for Blosm](https://github.com/vvoovv/blosm/wiki/Documentation#installation) to set it up inside Blender.
+2. Import building data as an XML file. There is a great [video tutorial](https://www.youtube.com/watch?v=7xHLDxUaQ7c) by a developer from Sionna. I highly suggest watching this before installation.
+  * First, you need to download [Blender](https://www.blender.org/download/), which is an open-source 3D rendering and modeling software. I used Blender 4.2 but you could likely use a more recent version.
+  * Download the [Mitsuba Blender Add-On](https://github.com/mitsuba-renderer/mitsuba-blender/releases). I used version 0.4.0. Just download the .zip file from their GitHub releases, then follow their installation and update guide [Link to Installation Guide](https://github.com/mitsuba-renderer/mitsuba-blender/wiki/Installation-&-Update-Guide) to include it in Blender. This is used for exporting as an XML.
+  * Download [Blosm](https://prochitecture.gumroad.com/l/blender-osm), which is another Blender add-on for importing data from OpenStreetMaps. You can choose to pay for it on the website, or not. Then, follow these [installation instructions](https://github.com/vvoovv/blosm/wiki/Documentation#installation) to set it up inside Blender.
   *  In Blender, open the Blosm tab on the right of the view area. Input your coordinates from bounding_box.txt, and then specify the import options for OpenStreetMaps. This should take a few minutes to pull all the data from the OpenStreetMaps server, but when you're done it should look like this:
-![Image of successful Blosm usage.](https://github.com/user-attachments/assets/04cdd374-8967-4fe1-b13f-4dd6d436f588) 
+![Image of successful Blosm usage.](https://github.com/user-attachments/assets/04cdd374-8967-4fe1-b13f-4dd6d436f588)
+  * Go to File -> Export -> mitsuba (.xml), and then select your location and preferred coordinate system. I would suggest using -Z Forward, Y up because that's what I used in my example.
+  * Move this .xml file into the data directory of your cloned repository, it should now be accessible within the simulation.
+3. Generate Pedestrian Data with Simulation of Urban Mobility (SUMO).
+ * Download [SUMO](https://eclipse.dev/sumo/).
+ * In your SUMO installation, navigate to Eclipse -> Sumo -> tools -> osmWebWizard.py, and run it as a Python script. This should open a web browser where you can input all the parameters of your simulation in a simple format. There is also a [tutorial](https://sumo.dlr.de/docs/Tutorials/OSMWebWizard.html) on using osmWebWizard.
+ * The osmWebWizard should generate a directory filled with configuration files, which can then be visualized and run with the sumo-gui. Sumo-gui is located in Eclipse -> Sumo -> bin -> sumo-gui.exe. Run this executable. This should open an application where you can go to File -> Open Simulation and select your osm.sumocfg file from the osmWebWizard export. It should look something like this:
+ ![image](https://github.com/user-attachments/assets/d688f01b-4563-4d49-a3f5-c623a1023b2c)
+ * You can modify the simulation here, or simply run it with the green button in the top left. Once you have run the simulation, go to Simulation -> Save and save the simulation results.
+ * Use the xml2csv converter located in Eclipse -> Sumo -> tools -> xml -> xml2csv, to convert the outputted xml files to csvs.
+ * Use the sumoSimulationDataParser within the data parsing folder of this Git repository to convert the csv files to a useable format for the simulation environment. This requires the bounding box to account for positions effectively.
+ * Move the output of the sumoSimulationDataParser into the data folder of your cloned repository, this should now be usable within your simulation environment.
 
 ## Goals
 - Construct a pipeline for the simulation of pedestrian data using SUMO
