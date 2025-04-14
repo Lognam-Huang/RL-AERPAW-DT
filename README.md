@@ -65,9 +65,9 @@ If you have any questions about the simulation environment or need help with set
 - Yuchen Liu, NCSU
 - NSF NAIRR Pilot Award
 
+<!---
 ## Good Luck and Happy Simulating!
 
-<!---
 ## Goals
 - Construct a pipeline for the simulation of pedestrian data using SUMO
 - Import building data from OpenStreetMaps and use Sionna for ray tracing
