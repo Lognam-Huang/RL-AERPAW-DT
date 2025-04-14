@@ -51,9 +51,13 @@ Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load
  ![image](https://github.com/user-attachments/assets/d688f01b-4563-4d49-a3f5-c623a1023b2c)
  * You can modify the simulation here, or simply run it with the green button in the top left. Once you have run the simulation, go to Simulation -> Save and save the simulation results.
  * Use the xml2csv converter located in Eclipse -> Sumo -> tools -> xml -> xml2csv, to convert the outputted xml files to csvs.
- * Use the sumoSimulationDataParser within the data parsing folder of this Git repository to convert the csv files to a useable format for the simulation environment. This requires the bounding box to account for positions effectively.
- * Move the output of the sumoSimulationDataParser into the data folder of your cloned repository, this should now be usable within your simulation environment.
+ * Use the sumoSimulationDataParser within the data parsing folder of this Git repository to convert the csv files to a useable format for the simulation environment. This requires the bounding box to account for positions effectively. You can call it like so
+```
+python sumoSimulationDataParser.py bounding_box.txt simulation_output.csv vehicle_result.csv pedestrian_result.csv
+```
+ * Move the vehicle_result.csv and pedestrian_result.csv files into the data folder of your cloned repository, they should now be usable within your simulation environment. 
 
+<!---
 ## Goals
 - Construct a pipeline for the simulation of pedestrian data using SUMO
 - Import building data from OpenStreetMaps and use Sionna for ray tracing
@@ -67,5 +71,5 @@ Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load
 - Generating pedestrian data with SUMO and parsing it into a usable format.
 - Importing data from OpenStreetMaps into Sionna
 - Running Sionna ray tracing algorithms to determine communication metrics like path loss between a UAV and a ground user.
-
+--->
 
