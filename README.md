@@ -57,6 +57,11 @@ python sumoSimulationDataParser.py bounding_box.txt simulation_output.csv vehicl
 ```
  * Move the vehicle_result.csv and pedestrian_result.csv files into the data folder of your cloned repository, they should now be usable within your simulation environment. 
 
+### Contact
+If you have any questions about the simulation environment or need help with set-up, please contact Everett Tucker at eftucker@ncsu.edu
+
+## Good Luck and Happy Simulating!
+
 <!---
 ## Goals
 - Construct a pipeline for the simulation of pedestrian data using SUMO
