@@ -6,12 +6,12 @@
 This research poster was presented at the Goodnight Research Symposium at NC State.
 
 ## Digital Twin Demonstrations
-The three GIFs below show the evolution of the simulated digital twin environment including
-* (Top) Coverage Map with Ground Users color-coded based on their UAV assignment
-* (Far Left) The number of Ground Users assigned to each UAV
-* (Middle Left) The total theoretical maximum throughput for each UAV, a measure of how optimal the UAV's position is with respect to the Users
-* (Middle Right) The total actual throughput for each UAV, including contributions from each assigned Ground User
-* (Far Right) The power consumption of each UAV including movement, hovering, and signal transmission power
+The three GIFs below show the evolution of the digital twin environment of Raleigh City downtown area, including
+* (Top) Network coverage map with Ground Users (GUs) color-coded based on their Unmanned Aerial Vehicles (UAV) assignments;
+* (Far Left) The number of GUs served by each UAV;
+* (Middle Left) The theoretical maximum throughput for each UAV, a measure of how optimal the UAV's position is with respect to the GUs;
+* (Middle Right) The actual throughput for each UAV, including contributions from each assigned GU;
+* (Far Right) The power consumption of each UAV including movement, hovering, and signal transmission power.
 
 ### Case 1: Demonstration of What-If Analysis on Network Performance (Prioritize Actual Data Rate)
 ![A Demonstration of the simulation showing User Data Rate, UAV Energy Consumption, Receiver Assignments, and the Coverage Map.](gifs/0_assignGUs.gif)
@@ -75,7 +75,7 @@ If you have any questions about the simulation environment or need help with set
 - Train a reinforcement learning model to control the UAVs to maximize the communication capacity of the UAV network with the Ground Users.
 
 ## Current Task
-- Working on a minimial control framework to simulation UAV and pedestrian movement and provide a wrapper for machine learning algorithms.
+- Working on a minimial control framework to simulation UAV and pedestrian movement and provide a wrapper for machine learning algorithms using the real-time data stream from AERPAW testbed.
 
 ## What's Done Already
 - Generating pedestrian data with SUMO and parsing it into a usable format.
