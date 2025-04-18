@@ -3,7 +3,7 @@
 
 ## Research Poster
 ![A research poster updated on March 18th, 2025](presentations/research_poster_final_img.jpg)
-This research poster was presented at the Goodnight Research Symposium at NC State on March 18th, 2025.
+This research poster was presented at the Goodnight Research Symposium at NC State.
 
 ## Digital Twin Demonstrations
 The three GIFs below show the evolution of the simulated digital twin environment including
