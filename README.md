@@ -1,5 +1,5 @@
 # 3D-DT
-## A UAV Digital Twin for Communication Optimization and Infrastructure Planning
+## A UAV Digital Twin for Communication Optimization and Task Planning
 
 ## Research Poster
 ![A research poster updated on March 18th, 2025](presentations/research_poster_final_img.jpg)
