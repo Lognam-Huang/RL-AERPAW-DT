@@ -60,7 +60,7 @@ python sumoSimulationDataParser.py bounding_box.txt simulation_output.csv vehicl
 ### Contact
 If you have any questions about the simulation environment or need help with set-up, please contact Everett Tucker at eftucker@ncsu.edu
 
-### Ongoing Work (to be update)
+### Ongoing Work (to be updated)
 - Connect a reinforcement learning pipeline to control the UAVs to maximize the communication capacity.
 - Develop a minimial control framework to incoporate pedestrian movements and provide a wrapper for machine learning algorithms using the real-time data stream from the NCSU AERPAW testbed.
 
