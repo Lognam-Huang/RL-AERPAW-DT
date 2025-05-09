@@ -467,24 +467,30 @@ class Environment():
         self.gus[id].device.position = tf.constant([self.gus[id].getPosition()[0], self.gus[id].getPosition()[1], self.gus[id].height])
     
 
-    def setTransmitterArray(self, arr):
+    def setTransmitterArray(self, arr=None):
         """
-        Sets the scene's transmitter array to arr
+        Sets the scene's transmitter array to arr, sets to a default if arr is None
 
         Args:
             arr the antenna array for the transmitters
         """
-        self.scene.tx_array = arr
+        if arr is None:
+            self.scene.tx_array = AntennaArray(antenna=Antenna("tr38901", "V"), positions=tf.Variable([0.0,0.0,0.0]))
+        else:
+            self.scene.tx_array = arr
 
 
-    def setReceiverArray(self, arr):
+    def setReceiverArray(self, arr=None):
         """
-        Sets the scene's receiver array to arr
+        Sets the scene's receiver array to arr, sets to a default if arr is None
 
         Args:
             arr the antenna array for the receivers
         """
-        self.scene.rx_array = arr
+        if arr is None:
+            self.scene.rx_array = AntennaArray(antenna=Antenna("tr38901", "V"), positions=tf.Variable([0.0,0.0,0.0]))
+        else:
+            self.scene.rx_array = arr
 
 
     def plotUAVs(self, length=None):
