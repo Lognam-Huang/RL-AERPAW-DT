@@ -42,7 +42,7 @@ Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load
   * Download [Blosm](https://prochitecture.gumroad.com/l/blender-osm), which is another Blender add-on for importing data from OpenStreetMaps. You can choose to pay for it on the website, or not. Then, follow these [installation instructions](https://github.com/vvoovv/blosm/wiki/Documentation#installation) to set it up inside Blender.
   *  In Blender, open the Blosm tab on the right of the view area. Input your coordinates from bounding_box.txt, and then specify the import options for OpenStreetMaps. This should take a few minutes to pull all the data from the OpenStreetMaps server, but when you're done it should look like this:
 ![Image of successful Blosm usage.](https://github.com/user-attachments/assets/04cdd374-8967-4fe1-b13f-4dd6d436f588)
-  * Go to File -> Export -> mitsuba (.xml), and then select your location and preferred coordinate system. We would suggest using -Z Forward, Y up because that's what I used in my example.
+  * Go to File -> Export -> mitsuba (.xml), and then select your location and preferred coordinate system. We would suggest using X Forward, Z up because that's what I used in my example.
   * Move this .xml file into the data directory of your cloned repository, it should now be accessible within the simulation.
 3. Generate Pedestrian Data with Simulation of Urban Mobility (SUMO).
  * Download [SUMO](https://eclipse.dev/sumo/).
