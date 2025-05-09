@@ -356,7 +356,7 @@ class Environment():
             self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
             self.n_tx += 1
         else:
-            self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
+            self.uavs[id].device = Receiver(name=str(id), position=pos, color=color)
             self.n_rx += 1
         
         self.scene.add(self.uavs[id].device)
