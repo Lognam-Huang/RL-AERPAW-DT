@@ -1,8 +1,8 @@
 """
 @description Contains functionality for controlling UAVs, Ground Users, and
-interfacing with Sionna methods.
+interfacing with Sionna (1.1.0) methods.
 @start-date 11-8-2024
-@updated 1-29-2025
+@updated 7-15-2025
 @author(s) Everett Tucker
 """
 
@@ -13,8 +13,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from ortools.sat.python import cp_model
-from sionna.rt import Antenna, AntennaArray
-from sionna.rt import Transmitter, Receiver
+from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver
 
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
@@ -165,42 +164,41 @@ class Environment():
         return math.sqrt(rtn)
             
 
-    def visualize(self, paths=None, coverage_map=None):
+    def visualize(self, paths=None, radio_map=None):
         """
         Visualizes the current receivers and transmitters in the scene.
-        Includes the paths and/or coverage map, if provided.
+        Includes the paths and/or radio map, if provided.
 
         Args:
             (sionna.rt.Paths): A paths object that you want to display in simulation
-            (sionna.rt.CoverageMap): A coverage map object that you want to display
+            (sionna.rt.RadioMap): A radio map object that you want to display
         """
 
         if paths is None:
-            if coverage_map is None:
+            if radio_map is None:
                 self.scene.preview(show_devices=True)
             else:
-                self.scene.preview(show_devices=True, coverage_map=coverage_map)
+                self.scene.preview(show_devices=True, radio_map=radio_map)
         else:
-            if coverage_map is None:
+            if radio_map is None:
                 self.scene.preview(show_devices=True, paths=paths)
             else:
-                self.scene.preview(show_devices=True, paths=paths, coverage_map=coverage_map)
+                self.scene.preview(show_devices=True, paths=paths, radio_map=radio_map)
     
 
-    def computeCoverageMap(self, max_depth, num_samples):
+    def computeRadioMap(self, max_depth, num_samples):
         """
-        Computes a coverage map for every transmitter using the provided
+        Computes a radio map for every transmitter using the provided
         arguments for maximum reflection depth and the number of samples
         on the fibonacci sphere.
 
         Args:
             max_depth (int): the maximum reflection depth computed
-            num_samples (int): the number of points to sample on the fibonacci sphere
+            num_samples (int): the number of points to sample for each transmitter in the scene
         """
-
-        return self.scene.coverage_map(max_depth=max_depth, cm_cell_size=(1,1), num_samples=num_samples, 
-                                        los=True, reflection=True, diffraction=True, 
-                                        edge_diffraction=True, ris=False, check_scene=False, num_runs=1)
+        solver = RadioMapSolver()
+        return solver(self.scene, cell_size=(1.0, 1.0), samples_per_tx=num_samples, max_depth=max_depth, 
+                      los=True, specular_reflection=False, diffuse_reflection=False, refraction=False)
     
 
     def computeAlpha(self, max_depth, num_samples):
@@ -235,12 +233,14 @@ class Environment():
         Returns:
             (sionna.rt.Paths): All possible line-of-sight paths
         """
-        return self.scene.compute_paths(max_depth=0, method="exhaustive", num_samples=(self.n_rx * self.n_tx), los=True,
-                                         reflection=False, diffraction=False, scattering=False, check_scene=False)
+        solver = PathSolver()
+        return solver(self.scene, max_depth=0, max_num_paths_per_src=1, samples_per_src=1, 
+                      los=True, specular_reflection=False, diffuse_reflection=False, refraction=False)
 
 
     def computeLOSDataRate(self):
         """
+        DEPRECATED IN Sionna 1.1.0
         Computes the average Line-of-sight theoretical maximum data rate across all pairs of transmitters and receivers.
         A larger value means that the paths can send more data and the UAVs are in more
         optimal positions for communication with the Ground Users.
@@ -249,6 +249,8 @@ class Environment():
             np.array(num_rx, num_tx): The total theoretical maximum data rate for each pair of receivers and transmitters across all line-of-sight paths in the simulation
         """
 
+        raise NotImplementedError("Function is deprecated in Sionna 1.1.0")
+        """
         paths = self.computeLOSPaths()
 
         # Check the sampling frequency parameter for the doppler shift
@@ -269,6 +271,7 @@ class Environment():
         signal_power = tf.broadcast_to(tf.reshape(signal_power, [1, -1]), [self.n_rx, self.n_tx])
 
         return bandwidth * np.log2(1 + (signal_power * np.abs(a) ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth))
+        """
     
 
     def computeGeneralPaths(self, max_depth, num_samples):
@@ -284,9 +287,10 @@ class Environment():
         Returns:
             (sionna.rt.Paths): All possible paths in the environment
         """
-
-        return self.scene.compute_paths(max_depth=max_depth, method="fibonacci", num_samples=num_samples, los=True,
-                                         reflection=True, diffraction=True, scattering=True, check_scene=False)
+        solver = PathSolver()
+        return solver(self.scene, max_depth=max_depth, max_num_paths_per_src=num_samples, 
+                      samples_per_src=num_samples, los=True, specular_reflection=True, 
+                      diffuse_reflection=True, refraction=True)
 
 
     def computeGeneralDataRate(self, max_depth, num_samples):
@@ -313,7 +317,7 @@ class Environment():
         else:
             paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs]))
         
-        a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
+        a, tau = paths.cir(sampling_frequency=1.0, num_time_steps=num_samples, normalize_delays=False, reverse_direction=False, out_type='tf')
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
@@ -475,7 +479,8 @@ class Environment():
             arr the antenna array for the transmitters
         """
         if arr is None:
-            self.scene.tx_array = AntennaArray(antenna=Antenna("tr38901", "V"), positions=tf.Variable([0.0,0.0,0.0]))
+            # Initializing a single isotropic antenna
+            self.scene.tx_array = PlanarArray(num_rows=1, num_cols=1, pattern="tr38901", polarization="V")
         else:
             self.scene.tx_array = arr
 
@@ -488,7 +493,7 @@ class Environment():
             arr the antenna array for the receivers
         """
         if arr is None:
-            self.scene.rx_array = AntennaArray(antenna=Antenna("tr38901", "V"), positions=tf.Variable([0.0,0.0,0.0]))
+            self.scene.rx_array = PlanarArray(num_rows=1, num_cols=1, pattern="tr38901", polarization="V")
         else:
             self.scene.rx_array = arr
 
