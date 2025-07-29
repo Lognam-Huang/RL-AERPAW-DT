@@ -29,6 +29,14 @@ Case 2 showcases another bi-objective algorithm that seeks to balance the cumula
 Case 3 demonstrates a bi-objective algorithm that focuses on the throughput load of the UAVs to balance the users' real-time traffic demands. Importantly, the distribution of UAV loads is slightly more consistent but lower overall than the pure throughput optimization. Furthermore, the distribution of active GUs in incredibly consistent now, likely beyond what would be required of an actual simulation. This shows that taking a throughput-focused route is much more effective at balancing UAV loads than a user-count method.
 
 ## Set-Up Instructions for Building a 3D Digital Twin Network
+### IMPORTANT - New Set-up Protocol for RL-DT v2.0.0
+With the upgrade from Sionna v0.19.2 to Sionna v1.1.0, major changes have to be made to how the environment is instantiated, especially as it relates to CPU-only runtimes. Importantly, RL-DT is now ONLY RELIABLY SUPPORTED on LINUX. The following instructions are for CPU-ONLY operation of the library on Linux (i.e. running a computer with no CUDA-capable GPU device). For configuring Sionna with a GPU, please see the [Tensorflow GPU Set-Up](https://www.tensorflow.org/install/pip).
+CPU-ONLY: Install the LLVM backend for DRJIT.
+ * Update the package lists with ```sudo apt-get update && sudo apt-get upgrade```
+ * Install libLLVM-19 by running ```sudo apt-get install llvm-19 llvm-19-dev clang-19```
+ * Set the DRJIT_LIBLLVM_PATH environemnt variable by running ```export DRJIT_LIBLLVM_PATH=/usr/lib/llvm-19/lib/libLLVM.so```
+ * Update GCC in Conda Environment by running ```conda install gcc=12.1.0``` from your desired conda environment and then ```export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$HOME/miniconda3/lib```
+
 ### Basic Initialization - Sample Data
 1. To begin using the digital environment with the sample data, which includes a 118 pedestrian position time series within a building map of downtown Raleigh, simply clone the git repository to your local machine.
 2. You can then use methods from the library by importing EnvironmentFramework to your Jupyter Notebook or Python files.
