@@ -20,12 +20,6 @@
 	<bsdf type="diffuse" id="concrete" name="concrete">
 		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
 	</bsdf>
-	<bsdf type="diffuse" id="concrete" name="concrete">
-		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="concrete" name="concrete">
-		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
-	</bsdf>
 	<bsdf type="twosided" id="medium_dry_ground" name="medium_dry_ground">
 		<bsdf type="principled" name="bsdf">
 			<rgb value="0.630753 0.590620 0.287441" name="base_color"/>

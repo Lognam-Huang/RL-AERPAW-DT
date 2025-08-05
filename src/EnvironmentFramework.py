@@ -8,12 +8,13 @@ interfacing with Sionna (1.1.0) methods.
 
 import sionna
 import math
+import mitsuba as mi
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from ortools.sat.python import cp_model
-from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver
+from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver, RadioMaterialBase
 
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
@@ -23,6 +24,14 @@ BOLTZMANN_CONSTANT = 1.380649e-23
 AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
+
+class CustomRadioMaterial(RadioMaterialBase):
+    """
+    Synatactical sugar for creating a custom radio material
+    """
+    def __init__(self, props):
+        super.__init__(self, props=props)
+
 
 """
 TODO:
@@ -52,7 +61,8 @@ class Environment():
             temperature (float): the temperature of the environment, in degrees Kelvin
         """
         # print("Loading Scene")
-        self.scene = sionna.rt.load_scene(scene_path)
+        mi.register_bsdf("mat-wall", lambda props: CustomRadioMaterial(props=props))
+        self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
         # print("Parsing Positions")
         self.ped_rx = ped_rx
         self.time_step = time_step
