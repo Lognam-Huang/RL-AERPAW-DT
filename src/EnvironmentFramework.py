@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from typing import Tuple
 from ortools.sat.python import cp_model
 from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver, RadioMaterialBase
 
@@ -286,12 +287,12 @@ class Environment():
         rtn = []
         for j in range(len(res)):
             if desired_throughputs is None:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
-                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                rtn.append(GroundUser(j, np.rot90(np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, k=1, axes=(1, 0)), height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
                                       delta_t=self.time_step, color=self.ped_color))
             else:
-                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
-                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                rtn.append(GroundUser(j, np.rot90(np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, k=1, axes=(1, 0)), height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
                                       delta_t=self.time_step, color=self.ped_color, desired_throughputs=desired_throughputs[j]))
             if self.ped_rx:
                 self.n_rx += 1
@@ -1255,9 +1256,9 @@ class GroundUser():
         self.delta_t = delta_t
         self.desired_throughputs = desired_throughputs
         if com_type == "tx":
-            self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0].tolist(), self.positions[0][1], height], color=color)
+            self.device = Transmitter(name="gu" + str(id), position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0].tolist(), self.positions[0][1], height], color=color)
+            self.device = Receiver(name="gu" + str(id), position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
@@ -1304,3 +1305,29 @@ class GroundUser():
             float: the desired throughput of the Ground User, in bytes per second rounded to the nearest integer
         """
         return self.desired_throughputs[self.step]
+
+
+
+class MinimalEnvironment():
+    """
+    Creates a new minimial environment from a Sionna scene with support for coverage maps and visualizations
+    at specific moments, instead of a time series
+    """
+
+    def __init__(self, scene_path, ped_rx=True, ped_color=np.zeros(3), uav_color=np.array(0.2, 0.5, 0.2), temperature=290):
+        """
+        Creates a new minimial environment from the Sionna scene and other parameters
+
+        Args:
+            scene_path (str): The path to the Sionna scene to load
+            ped_rx (boolean): True if the pedestrians are the receivers, False otherwise
+            ped_color (np.array(float)): The RGB color of the pedestrians in visualizations, shape (3,)
+            uav_color (np.array(float)): The RGB color of the UAVs in visualizations, shape (3,)
+            temperature (float): The temperature of the scene in Kelvin, default 290 
+        """
+
+        self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
+        self.ped_rx = ped_rx
+        self.ped_color = ped_color
+        self.uav_color = uav_color
+        self.temperature = temperature
