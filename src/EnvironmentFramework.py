@@ -287,12 +287,12 @@ class Environment():
         rtn = []
         for j in range(len(res)):
             if desired_throughputs is None:
-                rtn.append(GroundUser(j, np.rot90(np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
-                                      self.ped_height)]).T, k=1, axes=(1, 0)), height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
                                       delta_t=self.time_step, color=self.ped_color))
             else:
-                rtn.append(GroundUser(j, np.rot90(np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
-                                      self.ped_height)]).T, k=1, axes=(1, 0)), height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
+                rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
+                                      self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
                                       delta_t=self.time_step, color=self.ped_color, desired_throughputs=desired_throughputs[j]))
             if self.ped_rx:
                 self.n_rx += 1
@@ -1314,7 +1314,7 @@ class MinimalEnvironment():
     at specific moments, instead of a time series
     """
 
-    def __init__(self, scene_path, ped_rx=True, ped_color=np.zeros(3), uav_color=np.array(0.2, 0.5, 0.2), temperature=290):
+    def __init__(self, scene_path, ped_rx=True, ped_color=np.zeros(3), uav_color=np.array([0.2, 0.5, 0.2]), temperature=290):
         """
         Creates a new minimial environment from the Sionna scene and other parameters
 
