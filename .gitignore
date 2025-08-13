@@ -4,3 +4,8 @@ CoordinateAlignmentTest.ipynb
 ./RL-Pipeline/keys
 ./RL-Pipeline/windows_keys/AERPAW-sshkey
 ./.ipynb_checkpoints/SionnaRayTracingTest-checkpoint.ipynb
+# Python caches
+__pycache__/
+*.pyc
+# Jupyter autosaves
+.ipynb_checkpoints/
