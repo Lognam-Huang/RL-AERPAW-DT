@@ -9,3 +9,9 @@ __pycache__/
 *.pyc
 # Jupyter autosaves
 .ipynb_checkpoints/
+
+# Python caches
+__pycache__/
+*.pyc
+# Jupyter autosaves
+.ipynb_checkpoints/
