@@ -16,6 +16,8 @@ import tensorflow as tf
 from ortools.sat.python import cp_model
 from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver, RadioMaterialBase
 
+from typing import Tuple # trying to fix the Tuple error
+
 # The Earth's gravitational acceleration in m/s^2
 GRAVITATIONAL_ACCEL = 9.80665
 # The Boltzmann Constant in Joules/Kelvin
@@ -1257,7 +1259,11 @@ class GroundUser():
         if com_type == "tx":
             self.device = Transmitter(name="gu" + str(id), position=[self.positions[0][0].tolist(), self.positions[0][1], height], color=color)
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0].tolist(), self.positions[0][1], height], color=color)
+            # self.device = Receiver(name="gu" + str(id), position=[self.positions[0][0].tolist(), self.positions[0][1], height], color=color)
+
+            # try to fix data-type error
+            pos = np.array([self.positions[0][0], self.positions[0][1], height], dtype=np.float32)
+            self.device = Receiver(name="gu" + str(id), position=pos, color=color)
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
