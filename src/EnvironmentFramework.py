@@ -9,6 +9,7 @@ interfacing with Sionna (1.1.0) methods.
 import sionna
 import math
 import mitsuba as mi
+import drjit as dr
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -95,7 +96,7 @@ class CustomRadioMaterial(RadioMaterialBase):
         # The `jones_matrix_to_world_implicit()` builds the Jones matrix with the
         # structure we need.
         sqrt_g = mi.Complex2f(dr.sqrt(self._g), 0.)
-        jones_mat = jones_matrix_to_world_implicit(c1=sqrt_g,
+        jones_mat = sionna.rt.utils.jones_matrix_to_world_implicit(c1=sqrt_g,
                                                    c2=sqrt_g,
                                                    to_world=to_world,
                                                    k_in_local=ki_prime,
@@ -110,7 +111,7 @@ class CustomRadioMaterial(RadioMaterialBase):
         # Instantiate and set the BSDFSample object
         bs = mi.BSDFSample3f()
         # Specifies the type of interaction that was computed
-        bs.sampled_component = InteractionType.SPECULAR
+        bs.sampled_component = sionna.rt.constants.InteractionType.SPECULAR
         # Direction of the scattered wave in the world frame
         bs.wo = to_world@kr_prime
         # The next field of `bs` stores the probability that the sampled
@@ -150,7 +151,7 @@ class CustomRadioMaterial(RadioMaterialBase):
         # The `jones_matrix_to_world_implicit()` builds the Jones matrix with the
         # structure we need.
         sqrt_g = mi.Complex2f(dr.sqrt(self._g), 0.)
-        jones_mat = jones_matrix_to_world_implicit(c1=sqrt_g,
+        jones_mat = sionna.rt.utils.jones_matrix_to_world_implicit(c1=sqrt_g,
                                                    c2=sqrt_g,
                                                    to_world=to_world,
                                                    k_in_local=ki_prime,
@@ -158,7 +159,7 @@ class CustomRadioMaterial(RadioMaterialBase):
 
         # This model only scatters energy in the direction of the specular reflection.
         # Any other direction provided by the user `wo` should therefore lead to no energy.
-        is_valid = isclose(dr.dot(kr_prime, wo), mi.Float(1.))
+        is_valid = sionna.rt.utils.isclose(dr.dot(kr_prime, wo), mi.Float(1.))
         jones_mat = dr.select(is_valid, jones_mat, 0.)
 
         # Cast the Jones matrix to a `mi.Spectrum` to meet the requirements of
@@ -184,7 +185,7 @@ class CustomRadioMaterial(RadioMaterialBase):
 
         # As only one event and direction of scattering are possible with this model,
         # the probability is set to 1 for this direction and 0 for any other.
-        is_valid = isclose(dr.dot(kr_prime, wo), mi.Float(1.))
+        is_valid = sionna.rt.utils.isclose(dr.dot(kr_prime, wo), mi.Float(1.))
         return dr.select(is_valid, mi.Float(1.), mi.Float(0.))
 
     def traverse(self, callback : mi.TraversalCallback):
@@ -221,7 +222,7 @@ Perhaps the SNR is not dependent on the path itself though and could
 be thought of as constant, as a hyperparameter of the simulation.
 """
 class Environment():
-    def __init__(self, scene_path, position_df_path, desired_throughputs=None, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.zeros(3), wind_vector=np.zeros(3), temperature=290):
+    def __init__(self, scene_path, position_df_path, desired_throughputs=None, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.array([0, 1, 0]), wind_vector=np.zeros(3), temperature=290):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -246,8 +247,9 @@ class Environment():
         self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
         self.ped_rx = ped_rx
         self.time_step = time_step
+        self.cur_step = 0
         self.ped_height = ped_height
-        self.ped_color = ped_color
+        self.ped_color = ped_color  # The default is green like in the Sionna visualizations
         self.n_rx = 0
         self.n_tx = 0
         self.uavs = []
@@ -324,6 +326,7 @@ class Environment():
             uav_positions will remain in place after the step and their signal power will remain constant.
         """
 
+        self.cur_step += 1
         for x in range(len(self.uavs)):
             if x in uav_params:
                 self.moveAbsUAV(x, uav_params[x][1], uav_params[x][2])
@@ -376,7 +379,7 @@ class Environment():
                 self.scene.preview(show_devices=True, paths=paths, radio_map=radio_map)
     
 
-    def computeRadioMap(self, max_depth, num_samples):
+    def computeRadioMap(self, max_depth=2, num_samples=1000000, cell_size=(1.0, 1.0)):
         """
         Computes a radio map for every transmitter using the provided
         arguments for maximum reflection depth and the number of samples
@@ -385,10 +388,11 @@ class Environment():
         Args:
             max_depth (int): the maximum reflection depth computed
             num_samples (int): the number of points to sample for each transmitter in the scene
+            cell_size ([int, int]): The size of the radio map chuncks. Works like resolution, in meters
         """
         solver = RadioMapSolver()
-        return solver(self.scene, cell_size=(1.0, 1.0), samples_per_tx=num_samples, max_depth=max_depth, 
-                      los=True, specular_reflection=False, diffuse_reflection=False, refraction=False)
+        return solver(self.scene, cell_size=cell_size, samples_per_tx=num_samples, max_depth=max_depth, 
+                      los=True, specular_reflection=True, diffuse_reflection=True, refraction=True)
     
 
     def computeAlpha(self, max_depth, num_samples):
@@ -521,12 +525,11 @@ class Environment():
         return tf.math.reduce_sum(bandwidth * np.log2(1 + (signal_power * a ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth)), axis=2).numpy().astype(np.float64)
     
 
-    def addUAV(self, id, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.random.rand(3), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000):
+    def addUAV(self, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.array([1, 0, 0]), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
         Args:
-            id (int): the unique id of the UAV
             mass (float): the mass of the UAV in kilograms
             efficiency (float): the proportion of the UAV's power consumption that is turned into movement
             pos (np.array(3,)): the initial position of the UAV
@@ -541,6 +544,7 @@ class Environment():
             (int) the id of the created UAV
         """
 
+        id = self.n_tx if self.ped_rx else self.n_rx
         if rotor_area is None:
             self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, throughput_capacity))
         else:
@@ -658,12 +662,12 @@ class Environment():
         """
         self.gus[id].update()
         # Just update the x and y positions, the height stays constant
-        self.gus[id].device.position = tf.constant([self.gus[id].getPosition()[0], self.gus[id].getPosition()[1], self.gus[id].height])
+        self.gus[id].device.position = tf.constant([self.gus[id].getCurrentPosition()[0], self.gus[id].getCurrentPosition()[1], self.gus[id].height])
     
 
     def setTransmitterArray(self, arr=None):
         """
-        Sets the scene's transmitter array to arr, sets to a default if arr is None
+        Sets the scene's transmitter array to arr, sets to a default isotropic antenna if arr is None
 
         Args:
             arr the antenna array for the transmitters
@@ -677,7 +681,7 @@ class Environment():
 
     def setReceiverArray(self, arr=None):
         """
-        Sets the scene's receiver array to arr, sets to a default if arr is None
+        Sets the scene's receiver array to arr, sets to a default isotropic antenna if arr is None
 
         Args:
             arr the antenna array for the receivers
@@ -708,14 +712,19 @@ class Environment():
         plt.show()
 
 
-    def plotGUs(self):
+    def plotGUs(self, timestep=None):
         """
-        Plots the Ground Users in 2D
+        Plots the Ground Users in 2D at the given timestep
+
+        Args:
+            timestep (int): The time to get the position of the Ground User at, default is current step
         """
 
+        if timestep is None:
+            timestep = self.cur_step
         for gu in self.gus:
-            plt.scatter(gu.getPosition()[0], gu.getPosition()[1])
-        plt.title(f'Ground User Positions for timestep: {self.gus[0].step}')
+            plt.scatter(gu.getTimestampPosition(timestep)[0], gu.getTimestampPosition(timestep)[1])
+        plt.title(f'Ground User Positions for timestep: {timestep}')
         plt.xlabel("x-coordinate")
         plt.ylabel('y-coordinate')
         plt.show()
@@ -1250,7 +1259,7 @@ class GroundUser():
         self.id = id
         self.positions = positions
         self.initial_velocity = initial_velocity
-        self.step = 0
+        self.time_step = 0
         self.height = height
         self.bandwidth = bandwidth
         self.delta_t = delta_t
@@ -1267,21 +1276,38 @@ class GroundUser():
         """
         Updates the Ground User's position to the next time step and updates velocity
         """
-        self.step += 1
-        if self.step >= len(self.positions):
+        self.time_step += 1
+        if self.time_step >= len(self.positions):
             raise ValueError(f'No more positions to update for Ground User: {self.id}')
-        if self.step >= len(self.desired_throughputs):
+        if self.time_step >= len(self.desired_throughputs):
             raise ValueError(f'No more desired throughputs to update for Ground User: {self.id}')
 
 
-    def getPosition(self):
+    def getCurrentPosition(self):
         """
         Gets the current position of the Ground User
 
         Returns:
-            float: the current position of the Ground User, in m
+            np.array(float): the current position of the Ground User, in m, shape=(2,)
         """
-        return self.positions[self.step]
+        return self.positions[self.time_step]
+    
+
+    def getTimestampPosition(self, time_step):
+        """
+        Gets the position of the Ground User at the specified timestep
+
+        Args:
+            step (int): The timestep to get the position of the Ground User at
+        
+        Returns:
+            np.array(float): The current position of the Ground User, in m, shape=(2,)
+        """
+
+        if time_step > len(self.positions) or time_step < 0:
+            raise IndexError(f"Timestep is out of bounds for GU {self.id}")
+        else:
+            return self.positions[time_step]
 
     
     def getVelocity(self):
@@ -1291,10 +1317,10 @@ class GroundUser():
         Returns:
             float: the current velocity of the Ground User, in m/s
         """
-        if self.step == 0:
+        if self.time_step == 0:
             return self.initial_velocity
         else:
-            return (self.positions[self.step] - self.positions[self.step - 1]) / self.delta_t
+            return (self.positions[self.time_step] - self.positions[self.time_step - 1]) / self.delta_t
     
 
     def getDesiredThroughput(self):
@@ -1304,7 +1330,7 @@ class GroundUser():
         Returns:
             float: the desired throughput of the Ground User, in bytes per second rounded to the nearest integer
         """
-        return self.desired_throughputs[self.step]
+        return self.desired_throughputs[self.time_step]
 
 
 
