@@ -1149,10 +1149,10 @@ class Environment():
         m = len(landmarks)
 
         assert n == m
-        D = np.zeros((n, m)).astype(np.int64)
+        D = np.zeros((n, m))
         for i in range(n):
             for j in range(m):
-                D[i][j] = np.int64(np.linalg.norm(self.uavs[i].pos - landmarks[j]))
+                D[i][j] = np.linalg.norm(self.uavs[i].pos - landmarks[j])
         
         flattened = np.sort(D.reshape(n * n))
 
