@@ -1314,6 +1314,20 @@ class UAV():
             float: the UAV's total power consumption thus far
         """
         return self.consumption
+    
+    
+    def lookAt(self, position=None):
+        """
+        Adjusts the position of the antenna to look at a specific point, default is straight down towards the ground
+
+        Args:
+            position (np.array(float)): The position to point the UAV's antenna at
+        """
+
+        if position is None:
+            position = self.pos - np.array([0, 0, 1])  # A point just below the UAV
+        self.device.look_at(position)
+
             
 
 class GroundUser():
