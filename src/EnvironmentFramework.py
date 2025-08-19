@@ -27,6 +27,40 @@ AIR_DENSITY = 1.213941
 # The number of samples to use when calculating the energy consumption
 NUM_INTEGRATION_SAMPLES = 1000
 
+
+def _perfectMatching(matrix):
+        """
+        Utility function for assignLandmarks
+        Determines if the graph represented by the adjacency matrix has a perfect bipartite matching
+
+        Args:
+            matrix (np.array(np.array(int)): The 0/1 adjacency matrix, should have shape=(n, n)
+        
+        Returns:
+            Tuple(Boolean, np.array(int)): If a perfect matching is possible, followed by an optimal matching if possible, otherwise it is nonsense
+        """
+        n = len(matrix)
+        match = [-1] * n  # Tracks which row is matched to each column
+        graph = matrix    # The adjacency matrix
+        
+        def find_matching(u, seen):
+            for v in range(n):
+                if graph[u][v] == 1 and not seen[v]:
+                    seen[v] = True
+                    if match[v] == -1 or find_matching(match[v], seen):
+                        match[v] = u
+                        return True
+            return False
+
+        count = 0
+        for u in range(n):
+            seen = [False] * n
+            if find_matching(u, seen):
+                count += 1
+                
+        return count == n, match
+
+
 """
 CustomRadioMaterial class written by Sionna to help with the integration of our own radio materials in the future
 """
@@ -1098,6 +1132,50 @@ class Environment():
         throughputs[-1] = np.sum(throughputs)  # Again we can ignore 0
         
         return assignments, throughputs * scale
+    
+    def assignLandmarks(self, landmarks):
+        """
+        Assigns the UAVs current in the environment to landmarks optimially to minimize the maximum travel time
+        This is an algorithm, not a heuristic, so it produces an optimal solution in O(n^3logn) time
+
+        Args:
+            landmarks (np.array(float)): The positions of the landmarks in space, shape=(num_landmarks, 3)
+        
+        Returns:
+            Tuple(float, np.array(int)): The maximum UAV travel distance, and an array that stores the id of the landmark assigned to each UAV, shape=(num_uavs,)
+        """
+
+        n = len(self.uavs)
+        m = len(landmarks)
+
+        assert n == m
+        D = np.zeros((n, m)).astype(np.int64)
+        for i in range(n):
+            for j in range(m):
+                D[i][j] = np.int64(np.linalg.norm(self.uavs[i].pos - landmarks[j]))
+        
+        flattened = np.sort(D.reshape(n * n))
+
+        # Binary Searching with range n^2
+        left = 0
+        right = n * n - 1
+        while left < right:
+            mid = left // 2 + right // 2
+
+            res = _perfectMatching(D <= flattened[mid])
+
+            if res[0]:
+                right = mid
+            else:
+                left = mid + 1
+
+        # Swapping the matching to a standard basis
+        optimal_matching = _perfectMatching(D <= flattened[left])[1]
+        rtn = np.zeros(n).astype(np.int64)
+        for i in range(n):
+            rtn[optimal_matching[i]] = i
+
+        return flattened[left], np.array(rtn).astype(np.int32)
 
 
 class UAV():
