@@ -454,16 +454,33 @@ class Environment():
         return tf.squeeze(a).numpy().astype(np.float64)
 
 
-    def computeLOSPaths(self):
+    def computeLOSPaths(self, mode='gpu'):
         """
-        Computes the line-of-sight paths for all potential receivers and transmitters
+        Computes the line-of-sight paths for all potential receivers and transmitters.
+        Requires GPU support.
+
+        Args:
+            mode (str ['gpu', 'cpu']) the type of hardware you are using to run Sionna, can be checked with
+            tf.config.list_physical_devices('GPU')
 
         Returns:
             (sionna.rt.Paths): All possible line-of-sight paths
         """
+        dr.flush_malloc_cache()  # Freeing up memory, because this uses a lot
+
+        # Setting the mitsuba variant depending on the computation mode
+        if mode == 'gpu':
+            mi.set_variant("cuda_ad_mono_polarized")
+        elif mode == 'cpu':
+            mi.set_variant("llvm_ad_mono_polarized")
+        else:
+            raise TypeError(f"Mode should be 'cpu' or 'gpu' not {mode}")
+
         solver = PathSolver()
-        return solver(self.scene, max_depth=0, max_num_paths_per_src=1, samples_per_src=1, 
+        paths = solver(self.scene, max_depth=1, max_num_paths_per_src=self.n_rx, samples_per_src=1, synthetic_array=True,
                       los=True, specular_reflection=False, diffuse_reflection=False, refraction=False)
+        paths.interactions[:, :, :, :] = 0  # Line to fix a weird error, all should be type=0 for LoS
+        return paths
 
 
     def computeLOSDataRate(self):
@@ -502,19 +519,31 @@ class Environment():
         """
     
 
-    def computeGeneralPaths(self, max_depth, num_samples):
+    def computeGeneralPaths(self, max_depth, num_samples, mode='gpu'):
         """
         Computes line-of-sight, reflection, diffraction, and scattering
-        paths from all transmitters.
+        paths from all transmitters. Requires GPU support
 
         Args:
             max_depth (int): the maximum reflection depth usually 2-3 works well
             num_samples (int): the number of sample points to take from the
             fiboncci sphere, usually about 10^4 or 10^5
+            mode (str ['gpu', 'cpu']) the type of hardware you are using to run Sionna, can be checked with
+            tf.config.list_physical_devices('GPU')
         
         Returns:
             (sionna.rt.Paths): All possible paths in the environment
         """
+        dr.flush_malloc_cache()  # Freeing up memory, because this uses a lot
+
+        # Setting the mitsuba variant depending on the computation mode
+        if mode == 'gpu':
+            mi.set_variant("cuda_ad_mono_polarized")
+        elif mode == 'cpu':
+            mi.set_variant("llvm_ad_mono_polarized")
+        else:
+            raise TypeError(f"Mode should be 'cpu' or 'gpu' not {mode}")
+        
         solver = PathSolver()
         return solver(self.scene, max_depth=max_depth, max_num_paths_per_src=num_samples, 
                       samples_per_src=num_samples, los=True, specular_reflection=True, 
@@ -585,10 +614,10 @@ class Environment():
             self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, throughput_capacity))
 
         if self.ped_rx:
-            self.uavs[id].device = Transmitter(name=str(id), position=pos, color=color)
+            self.uavs[id].device = Transmitter(name=str(id), position=mi.Point3f(pos), color=color)
             self.n_tx += 1
         else:
-            self.uavs[id].device = Receiver(name=str(id), position=pos, color=color)
+            self.uavs[id].device = Receiver(name=str(id), position=mi.Point3f(pos), color=color)
             self.n_rx += 1
         
         self.scene.add(self.uavs[id].device)
