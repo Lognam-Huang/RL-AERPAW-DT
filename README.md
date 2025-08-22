@@ -72,6 +72,102 @@ If you have any questions about the simulation environment or need help with set
 - Connect a reinforcement learning pipeline to control the UAVs to maximize the communication capacity.
 - Develop a minimial control framework to incoporate pedestrian movements and provide a wrapper for machine learning algorithms using the real-time data stream from the NCSU AERPAW testbed.
 
+### Generating Radio Map Data
+
+This section shows how to use the framework to generate radio map data (e.g., path gain, RSS, SINR) with Sionna-RT.
+
+> **Note**: If you encounter dependency errors when installing packages (especially `MarkupSafe` / `Jinja2`), you may need to manually install compatible versions before installing the full requirements:
+> ```bash
+> pip install "markupsafe>=2.1.3,<3" "jinja2>=3.1,<4"
+> pip install -r pip_reqs.txt
+> ```
+> This should allow you to successfully run the radio-map utilities.
+
+---
+
+#### Step-by-step example
+
+Below is a minimal working example of how to:
+1. Load a scene (`.xml`) and ground user trajectories (`.csv`)
+2. Add UAV(s)
+3. Configure antenna arrays
+4. Compute and visualize the radio map
+
+```python
+import numpy as np
+import tensorflow as tf
+import drjit as dr
+import matplotlib.pyplot as plt
+import sionna
+
+from EnvironmentFramework import Environment, UAV, GroundUser
+from sionna.rt import PlanarArray
+```
+
+#### Initialize the environment
+```python
+test_radiomap_env = Environment(
+    '../RL-AERPAW-DT/data/RaleighUnionSquareStandardReference/raleigh_union_square.xml',
+    '../RL-AERPAW-DT/data/simulated_final_person_new.csv',
+    time_step=1,
+    ped_height=1.5,
+    ped_rx=True,
+    wind_vector=np.zeros(3)
+)
+```
+
+#### Add UAVs
+```python
+id0 = test_radiomap_env.addUAV(pos=np.array([0, 0, 100]))
+
+id1 = test_radiomap_env.addUAV(
+    mass=10,
+    efficiency=0.8,
+    pos=np.array([0, -500, 100]),
+    vel=np.zeros(3),
+    bandwidth=50,
+    rotor_area=0.5,
+    signal_power=3
+)
+```
+
+#### Set antenna arrays
+```python
+test_radiomap_env.setTransmitterArray()
+test_radiomap_env.setReceiverArray()
+```
+
+#### Compute & visualize the radio map
+```python
+test_radio_map = test_radiomap_env.computeRadioMap(
+    max_depth=2,
+    num_samples=100000,
+    cell_size=(1, 1)
+)
+
+# Project-specific visualization
+test_radiomap_env.visualize(radio_map=test_radio_map)
+```
+
+You can also use Sionna’s built-in `.show()` API:
+test_radio_map.show(metric="path_gain")
+test_radio_map.show(metric="rss")
+test_radio_map.show(metric="sinr")
+
+#### Store radio map data
+
+You can access raw metrics as 3-D arrays (indexed by `[transmitter, x_idx, y_idx]`):
+```python
+test_sinr = test_radio_map.sinr
+print(test_sinr.shape)
+print(test_sinr[0][1000][900])  # Example: SINR at Tx0, cell (1000, 900)
+
+# Similarly:
+# test_radio_map.rss
+# test_radio_map.path_gain
+```
+or more details on available metrics and API usage:
+https://nvlabs.github.io/sionna/rt/api/radio_maps.html#sionna.rt.RadioMap
 
 ### Acknowledgement
 - Everett Tucker, NCSU
