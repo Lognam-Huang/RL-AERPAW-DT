@@ -68,7 +68,7 @@ python sumoSimulationDataParser.py bounding_box.txt simulation_output.csv vehicl
 
 ### Digital Twin as a Tool: Generating Radio Map Data
 
-This section shows how to use the framework to generate radio map data (e.g., path gain, RSS, SINR) with Sionna-RT.
+This section shows how to use this framework to generate radio map data (e.g., including path gain, RSS, SINR).
 
 > **Note**: If you encounter dependency errors when installing packages (especially `MarkupSafe` / `Jinja2`), you may need to manually install compatible versions before installing the full requirements:
 > ```bash
