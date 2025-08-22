@@ -173,7 +173,6 @@ test_radio_map.show(metric="sinr")
 You can access raw metrics as 3-D arrays (indexed by `[transmitter, x_idx, y_idx]`):
 ```python
 test_sinr = test_radio_map.sinr
-print(test_sinr.shape)
 print(test_sinr[0][1000][900])  # Example: SINR at Tx0, cell (1000, 900)
 
 # Similarly:
