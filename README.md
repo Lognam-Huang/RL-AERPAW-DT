@@ -149,10 +149,24 @@ test_radio_map = test_radiomap_env.computeRadioMap(
 test_radiomap_env.visualize(radio_map=test_radio_map)
 ```
 
+![Radio Map](assets/radiomap.png)
+
+
 You can also use Sionna’s built-in `.show()` API:
+```python
 test_radio_map.show(metric="path_gain")
+```
+![Gain](assets/path_gain.png)
+
+```python
 test_radio_map.show(metric="rss")
+```
+![RSS](assets/rss.png)
+
+```python
 test_radio_map.show(metric="sinr")
+```
+![SINR Map](assets/sinr.png)
 
 #### Store radio map data
 
