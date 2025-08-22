@@ -65,14 +65,8 @@ python sumoSimulationDataParser.py bounding_box.txt simulation_output.csv vehicl
 ```
  * Move the vehicle_result.csv and pedestrian_result.csv files into the data folder of your cloned repository, they should now be usable within your simulation environment. 
 
-### Contact
-If you have any questions about the simulation environment or need help with set-up, please contact Everett Tucker at eftucker@ncsu.edu
 
-### Ongoing Work (to be updated)
-- Connect a reinforcement learning pipeline to control the UAVs to maximize the communication capacity.
-- Develop a minimial control framework to incoporate pedestrian movements and provide a wrapper for machine learning algorithms using the real-time data stream from the NCSU AERPAW testbed.
-
-### Generating Radio Map Data
+### Digital Twin as a Tool: Generating Radio Map Data
 
 This section shows how to use the framework to generate radio map data (e.g., path gain, RSS, SINR) with Sionna-RT.
 
@@ -182,8 +176,16 @@ print(test_sinr[0][1000][900])  # Example: SINR at Tx0, cell (1000, 900)
 or more details on available metrics and API usage:
 https://nvlabs.github.io/sionna/rt/api/radio_maps.html#sionna.rt.RadioMap
 
+### Contact
+If you have any questions about the simulation environment or need help with set-up, please contact Everett Tucker at eftucker@ncsu.edu
+
+### Ongoing Work (to be updated)
+- Connect a reinforcement learning pipeline to control the UAVs to maximize the communication capacity.
+- Develop a minimial control framework to incoporate pedestrian movements and provide a wrapper for machine learning algorithms using the real-time data stream from the NCSU AERPAW testbed.
+
 ### Acknowledgement
 - Everett Tucker, NCSU
+- Jiayuan Huang, NCSU
 - Yuchen Liu, NCSU
 - NSF NAIRR Pilot Award
 
