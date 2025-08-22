@@ -395,6 +395,7 @@ class Environment():
         """
         Visualizes the current receivers and transmitters in the scene.
         Includes the paths and/or radio map, if provided.
+        Uses the SINR metric for the radio maps by default
 
         Args:
             (sionna.rt.Paths): A paths object that you want to display in simulation
@@ -405,12 +406,12 @@ class Environment():
             if radio_map is None:
                 self.scene.preview(show_devices=True)
             else:
-                self.scene.preview(show_devices=True, radio_map=radio_map)
+                self.scene.preview(show_devices=True, radio_map=radio_map, rm_metric="sinr")
         else:
             if radio_map is None:
                 self.scene.preview(show_devices=True, paths=paths)
             else:
-                self.scene.preview(show_devices=True, paths=paths, radio_map=radio_map)
+                self.scene.preview(show_devices=True, paths=paths, radio_map=radio_map, rm_metric="sinr")
     
 
     def computeRadioMap(self, max_depth=2, num_samples=1000000, cell_size=(1.0, 1.0)):
@@ -427,6 +428,27 @@ class Environment():
         solver = RadioMapSolver()
         return solver(self.scene, cell_size=cell_size, samples_per_tx=num_samples, max_depth=max_depth, 
                       los=True, specular_reflection=True, diffuse_reflection=True, refraction=True)
+    
+
+    def getUserSINRS(self, radio_map):
+        """
+        Computes the SINR values for each Ground User based on their position in the specified radio map
+        Currently, these are just merged linearly, but they should probably use diversity combining to merge signals from each UAV
+
+        Args:
+            radio_map (sionna.rt.PlanarRadioMap): The radio map to use for computing the SINR, can be obtained with computeRadioMap
+        
+        Returns:
+            np.array(float): An array of the SINR values for each Ground User, shape=(num_rx,)
+        """
+
+        # Indices are in format (column, row)
+        indices = radio_map.rx_cell_indices.numpy().T
+        rtn = np.empty(shape=self.n_rx)
+        for i in range(self.n_rx):
+            rtn[i] = np.sum(radio_map.sinr[:, int(indices[i][1]), int(indices[i][0])])
+
+        return rtn
     
 
     def computeAlpha(self, max_depth, num_samples):
@@ -620,6 +642,7 @@ class Environment():
             self.uavs[id].device = Receiver(name=str(id), position=mi.Point3f(pos), color=color)
             self.n_rx += 1
         
+        self.uavs[id].lookAt()  # Pointing the UAV at the ground to start
         self.scene.add(self.uavs[id].device)
         return len(self.uavs) - 1
 
@@ -1162,6 +1185,7 @@ class Environment():
         
         return assignments, throughputs * scale
     
+
     def assignLandmarks(self, landmarks):
         """
         Assigns the UAVs current in the environment to landmarks optimially to minimize the maximum travel time
