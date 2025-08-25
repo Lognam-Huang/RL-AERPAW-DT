@@ -1,8 +1,8 @@
 """
-@description Contains functionality for controlling UAVs, Ground Users, and
-interfacing with Sionna (1.1.0) methods.
+@description Contains functionality for controlling UAVs, Ground Users, 
+Base Stations, and interfacing with Sionna (1.1.0) methods.
 @start-date 11-8-2024
-@updated 7-15-2025
+@updated 8-25-2025
 @author(s) Everett Tucker
 """
 
@@ -286,7 +286,9 @@ class Environment():
         self.ped_color = ped_color  # The default is green like in the Sionna visualizations
         self.n_rx = 0
         self.n_tx = 0
+        self.n_bs = 0
         self.uavs = []
+        self.base_stations = []
         self.gus = self.createGroundUsers(position_df_path, desired_throughputs)
         self.temperature = temperature
         self.wind = wind_vector
@@ -367,6 +369,9 @@ class Environment():
             else:
                 self.moveAbsUAV(x, self.uavs[x].pos, self.uavs[x].vel)
             self.setUAVSignalPower(x, uav_params[x][0])
+        
+        for bs in self.base_stations:
+            bs.computeConsumption()
 
         self.advancePedestrianPositions()
 
@@ -439,16 +444,16 @@ class Environment():
             radio_map (sionna.rt.PlanarRadioMap): The radio map to use for computing the SINR, can be obtained with computeRadioMap
         
         Returns:
-            np.array(float): An array of the SINR values for each Ground User, shape=(num_rx,)
+            np.array(np.array(float)): An array of the SINR values for each Ground User to each UAV, shape=(num_rx,num_tx)
         """
 
         # Indices are in format (column, row)
         indices = radio_map.rx_cell_indices.numpy().T
-        rtn = np.empty(shape=self.n_rx)
+        rtn = []
         for i in range(self.n_rx):
-            rtn[i] = np.sum(radio_map.sinr[:, int(indices[i][1]), int(indices[i][0])])
+            rtn.append(radio_map.sinr[:, int(indices[i][1]), int(indices[i][0])])
 
-        return rtn
+        return np.array(rtn)
     
 
     def computeAlpha(self, max_depth, num_samples):
@@ -610,7 +615,7 @@ class Environment():
         return tf.math.reduce_sum(bandwidth * np.log2(1 + (signal_power * a ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth)), axis=2).numpy().astype(np.float64)
     
 
-    def addUAV(self, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.array([1, 0, 0]), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000):
+    def addUAV(self, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.array([1, 0, 0]), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
@@ -623,7 +628,8 @@ class Environment():
             bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
             rotor_area (float): the area of the UAV's rotors, in m^2
             signal_power (float): the transmitter/receiver power of the UAV, in watts
-            num_channels (int): the number of channels the UAV has for communication, equal to the number of Ground Users it can support
+            throughput_capacity (float): the maximum throughput of the Base Station in Bytes per second, default 625,000,000
+            battery_capacity (float): the battery capacity of the UAV, in Joules
         
         Returns:
             (int) the id of the created UAV
@@ -631,20 +637,50 @@ class Environment():
 
         id = self.n_tx if self.ped_rx else self.n_rx
         if rotor_area is None:
-            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, throughput_capacity))
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, throughput_capacity, battery_capacity))
         else:
-            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, throughput_capacity))
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, throughput_capacity, battery_capacity))
 
         if self.ped_rx:
-            self.uavs[id].device = Transmitter(name=str(id), position=mi.Point3f(pos), color=color)
+            self.uavs[id].device = Transmitter(name=f"uav{id}", position=mi.Point3f(pos), color=color)
             self.n_tx += 1
         else:
-            self.uavs[id].device = Receiver(name=str(id), position=mi.Point3f(pos), color=color)
+            self.uavs[id].device = Receiver(name=f"uav{id}", position=mi.Point3f(pos), color=color)
             self.n_rx += 1
         
         self.uavs[id].lookAt()  # Pointing the UAV at the ground to start
         self.scene.add(self.uavs[id].device)
         return len(self.uavs) - 1
+
+
+    def addBaseStation(self, device_type="tx", pos=np.zeros(3,), color=np.array([1, 0, 0]), bandwidth=50, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
+        """
+        Adds a new Base Station to the simulation with the specified parameters
+
+        Args:
+            pos (np.array(3,)): the initial position of the UAV
+            device_type (str): the type of the device associated with the Base Station, either "tx" or "rx" default "tx"
+            color (np.array(3,)): the color of the UAV used for visualization
+            bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
+            signal_power (float): the transmitter/receiver power of the UAV, in watts
+            throughput_capacity (float): the maximum throughput of the Base Station in Bytes per second, default 625,000,000
+        
+        Returns:
+            (int): the unique id of the Base Station
+        """
+        assert device_type in ["rx", "tx"]
+
+        id = self.n_bs
+        self.base_stations.append(BaseStation(id, pos, bandwidth, self.time_step, signal_power, throughput_capacity, battery_capacity))
+        if device_type == "tx":
+            self.base_stations[id].device = Transmitter(name=f"bs{id}", position=mi.Point3f(pos), color=color)
+        else:
+            self.base_stations[id].device = Receiver(name=f"bs{id}", position=mi.Point3f(pos), color=color)
+        self.n_bs += 1
+        
+        self.base_stations[id].lookAt()  # Pointing the Base Station at the ground to start
+        self.scene.add(self.base_stations[id].device)
+        return self.n_bs - 1
 
 
     def setUAVSignalPower(self, id, power):
@@ -712,24 +748,11 @@ class Environment():
             np.array(3,): the absolute velocity of the UAV
         """
         return self.uavs[id].vel + self.wind
-    
-
-    def getUAVConsumption(self, id):
-        """
-        Gets the power consumption of the specified UAV, in joules
-
-        Args:
-            id (int): the unique id of the UAV
-
-        Returns:
-            float: the consumption of the specified UAV, in joules
-        """
-        return self.uavs[id].getConsumption()
 
 
     def getConsumptions(self):
         """
-        Returns a dictionary of all the id : consumption pairs for each UAV
+        Returns a dictionary of all the id : consumption pairs for each Base Station or UAV
         currently in the simulation
 
         Returns:
@@ -737,8 +760,8 @@ class Environment():
         """
 
         rtn = {}
-        for x in range(len(self.uavs)):
-            rtn[x] = self.getUAVConsumption(x)
+        for id in range(len(self.uavs)):
+            rtn[id] = self.uavs[id].getConsumption()
         return rtn
 
 
@@ -778,9 +801,9 @@ class Environment():
             self.scene.rx_array = arr
 
 
-    def plotUAVs(self, length=None):
+    def plotBS(self, length=None):
         """
-        Plots the positions and velocities of all the current UAVs in 3 Dimensions
+        Plots the positions and velocities of all the current Base Stations in 3 Dimensions
 
         Args:
             length (float): the length of the normalized velocity vectors, None if not normalized
@@ -841,7 +864,7 @@ class Environment():
 
         return np.array(rtn)
     
-    
+
     # TODO: Delete, likely deprecated
     def getDataRateFromAssignments(self, assignments, path_qualities):
         """
@@ -1231,7 +1254,60 @@ class Environment():
         return flattened[left], np.array(rtn).astype(np.int32)
 
 
-class UAV():
+class BaseStation():
+    def __init__(self, id, pos=np.zeros(3,), bandwidth=50, delta_t=1, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
+        """
+        Creates a new base station object with the specified position and communication parameters
+
+        Args:
+            id (int): The unique id of the base station
+            pos (np.array(float)): The position of the base station in space, shape=(3,)
+            bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
+            delta_t (float): The time between simulation timesteps, in seconds
+            throughput_capacity (int): the throughput capacity of the UAV in bytes per second rounded to the nearest integer, default 625,000,000 bytes per second
+            battery_capacity (float): the battery capacity of the UAV, in joules, defaults to 10,000 J
+        """
+        self.id = id
+        self.pos = pos
+        self.bandwidth = bandwidth
+        self.delta_t = delta_t
+        self.signal_power = signal_power
+        self.throughput_capacity = throughput_capacity
+        self.battery_capacity = battery_capacity
+        self.device = None  # Initialized externally
+
+
+    def computeConsumption(self):
+        """
+        Computes the consumption of the base station in one timestep and adds it to the base station's consumption
+        """
+        self.consumption += self.signal_power * self.delta_t
+
+    
+    def getConsumption(self):
+        """
+        Gets the Base station's power consumption so far, in Joules
+
+        Returns:
+            (float): The Base Station's power consumption so far, in Joules
+        """
+        return self.consumption
+
+
+    def lookAt(self, position=None):
+        """
+        Adjusts the position of the antenna to look at a specific point, default is straight down towards the ground
+
+        Args:
+            position (np.array(float)): The position to point the UAV's antenna at
+        """
+
+        if position is None:
+            position = self.pos - np.array([0, 0, 1])  # A point just below the UAV
+        self.device.look_at(position)
+
+        
+class UAV(BaseStation):
     def __init__(self, id, mass=1, efficiency=0.8, pos=np.zeros(3,), vel=np.zeros(3,), bandwidth=50, delta_t=1, rotor_area=0.5, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
         """
         Creates a new UAV object with the specified physical and communication parameters
@@ -1243,27 +1319,20 @@ class UAV():
             pos (np.array(3,)): the initial position of the UAV
             vel (np.array(3,)): the initial velocity of the UAV
             bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
-            color (np.array(3,)): the color of the UAV used for visualization
-            com_type (str): either "tx" for transmitter or "rx" for receiver, TODO: add functionality for both at the same time?
+            delta_t (float): The time between simulation timesteps, in seconds
             rotor_area (float): the total area of the UAV's rotors, in square meters
             signal_power (float): the transmitter/receiver power of the UAV, in watts
             throughput_capacity (int): the throughput capacity of the UAV, in bytes per second, rounded to the nearest integer
             defaults to 625,000,000 bytes per second, or 5 Gbps
             battery_capacity (float): the battery capacity of the UAV, in joules, defaults to 10,000 J
         """
-        self.id = id
+        
+        # Calling super constructor for Base Station
+        super().__init__(id, pos, bandwidth, delta_t, signal_power, throughput_capacity, battery_capacity)
         self.mass = mass
         self.efficiency = efficiency
-        self.pos = pos
         self.vel = vel
-        self.delta_t = delta_t
-        self.consumption = 0  # Cumulative consumption from movement, computation, and communication, in joules
-        self.bandwidth = bandwidth
         self.rotor_area = rotor_area
-        self.signal_power = signal_power
-        self.throughput_capacity = throughput_capacity
-        self.battery_capacity = battery_capacity
-        self.device = None  # Initialized later
         
     
     def p(self, t, bezier):
@@ -1348,7 +1417,7 @@ class UAV():
         """
 
         # Computing the bezier
-        f = np.array([self.pos, self.vel, new_pos, new_vel])
+        f = np.array([super.pos, self.vel, new_pos, new_vel])
         bezier = np.dot(bezier_matrix, f)
 
         # Updating consumption
@@ -1357,30 +1426,6 @@ class UAV():
         # Updating position and velocity
         self.pos = new_pos
         self.vel = new_vel
-
-
-    def getConsumption(self):
-        """
-        Gets the total power consumption of the UAV up to this point in simulation
-
-        Returns:
-            float: the UAV's total power consumption thus far
-        """
-        return self.consumption
-    
-    
-    def lookAt(self, position=None):
-        """
-        Adjusts the position of the antenna to look at a specific point, default is straight down towards the ground
-
-        Args:
-            position (np.array(float)): The position to point the UAV's antenna at
-        """
-
-        if position is None:
-            position = self.pos - np.array([0, 0, 1])  # A point just below the UAV
-        self.device.look_at(position)
-
             
 
 class GroundUser():
@@ -1400,7 +1445,6 @@ class GroundUser():
             desired_throughputs (np.array(int)): the desired throughput of the ground user at each time step, in bytes per second rounded to the nearest integer
             defaults to 375000 bytes per second, or 3 Mbps
         """
-
         self.id = id
         self.positions = positions
         self.initial_velocity = initial_velocity
@@ -1410,9 +1454,9 @@ class GroundUser():
         self.delta_t = delta_t
         self.desired_throughputs = desired_throughputs
         if com_type == "tx":
-            self.device = Transmitter(name="gu" + str(id), position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
+            self.device = Transmitter(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
         elif com_type == "rx":
-            self.device = Receiver(name="gu" + str(id), position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
+            self.device = Receiver(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
@@ -1476,29 +1520,4 @@ class GroundUser():
             float: the desired throughput of the Ground User, in bytes per second rounded to the nearest integer
         """
         return self.desired_throughputs[self.time_step]
-
-
-
-class MinimalEnvironment():
-    """
-    Creates a new minimial environment from a Sionna scene with support for coverage maps and visualizations
-    at specific moments, instead of a time series
-    """
-
-    def __init__(self, scene_path, ped_rx=True, ped_color=np.zeros(3), uav_color=np.array([0.2, 0.5, 0.2]), temperature=290):
-        """
-        Creates a new minimial environment from the Sionna scene and other parameters
-
-        Args:
-            scene_path (str): The path to the Sionna scene to load
-            ped_rx (boolean): True if the pedestrians are the receivers, False otherwise
-            ped_color (np.array(float)): The RGB color of the pedestrians in visualizations, shape (3,)
-            uav_color (np.array(float)): The RGB color of the UAVs in visualizations, shape (3,)
-            temperature (float): The temperature of the scene in Kelvin, default 290 
-        """
-
-        self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
-        self.ped_rx = ped_rx
-        self.ped_color = ped_color
-        self.uav_color = uav_color
-        self.temperature = temperature
+    
