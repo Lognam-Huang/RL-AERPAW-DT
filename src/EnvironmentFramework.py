@@ -443,7 +443,7 @@ class Environment():
                       los=True, specular_reflection=True, diffuse_reflection=True, refraction=True)
     
 
-    def getUserSINRS(self, radio_map):
+    def getUserSINR(self, radio_map):
         """
         Computes the SINR values for each Ground User based on their position in the specified radio map
         Currently, these are just merged linearly, but they should probably use diversity combining to merge signals from each UAV
@@ -452,7 +452,7 @@ class Environment():
             radio_map (sionna.rt.PlanarRadioMap): The radio map to use for computing the SINR, can be obtained with computeRadioMap
         
         Returns:
-            np.array(np.array(float)): An array of the SINR values for each Ground User to each UAV, shape=(num_rx,num_tx)
+            np.array(np.array(float)): An array of the SINR values in dB for each Ground User to each UAV, shape=(num_rx, num_tx)
         """
 
         # Indices are in format (column, row)
@@ -461,7 +461,7 @@ class Environment():
         for i in range(self.n_rx):
             rtn.append(radio_map.sinr[:, int(indices[i][1]), int(indices[i][0])])
 
-        return np.array(rtn)
+        return 10 * np.log10(np.array(rtn))
     
 
     def getBandwidths(self, device_type="tx"):
@@ -483,6 +483,24 @@ class Environment():
                 rtn.append(self.gus[int(device[2:])].bandwidth)
             elif device.startswith("bs"):
                 rtn.append(self.base_stations[int(device[2:])].bandwidth)
+        return np.array(rtn, dtype=np.float64)
+
+
+    def getSignalPowers(self):
+        """
+        Returns a list of the signal powers for each transmitter in the scene
+
+        Return:
+            np.array(float): The signal powers for each transmitter in the scene, shape=(num_tx)
+        """
+        rtn = []
+        for tx in self.scene.transmitters:
+            if tx.startswith("uav"):
+                rtn.append(self.uavs[int(tx[3:])].signal_power)
+            elif tx.startswith("gu"):
+                rtn.append(self.gus[int(tx[2:])].signal_power)
+            elif tx.startswith("bs"):
+                rtn.append(self.base_stations[int(tx[2:])].signal_power)
         return np.array(rtn, dtype=np.float64)
     
 
@@ -531,15 +549,16 @@ class Environment():
         bandwidth = np.reshape(self.getBandwidths(device_type="tx"), (1, self.n_tx, 1))
         noise_power = np.broadcast_to(bandwidth, a_real.shape) * self.temperature * BOLTZMANN_CONSTANT
 
-        # TODO: Get signal power from each transmitter
-
+        # Getting signal power from each transmitter
+        tx_power = np.reshape(self.getSignalPowers(), (1, self.n_tx))
+        tx_power = np.broadcast_to(tx_power, (self.n_rx, self.n_tx))
 
         # Summing through the num_paths dimension (2)
         signal_power = a_real * a_real + a_complex * a_complex  # Effectively multiplying by the conjugate, maximum-ratio combining
-        signal_power = np.sum(signal_power, axis=2)
+        signal_power = np.sum(signal_power, axis=2) * tx_power
         noise_power = np.sum(noise_power, axis=2)
 
-        return np.maximum(20 * np.log10(signal_power / noise_power), 0)
+        return 10 * np.log10(signal_power / noise_power)
     
 
     def computeLOSPaths(self, mode='gpu'):
