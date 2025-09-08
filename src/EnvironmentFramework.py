@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from typing import Tuple
 from ortools.sat.python import cp_model
+from sionna.phy.utils import complex_normal
 from sionna.rt import Transmitter, Receiver, PlanarArray, PathSolver, RadioMapSolver, RadioMaterialBase
 
 # The Earth's gravitational acceleration in m/s^2
@@ -463,7 +464,29 @@ class Environment():
         return np.array(rtn)
     
 
-    def computeAlpha(self, max_depth=1, num_samples=100000, sampling_frequency=1.0, time_steps=1, reverse=False):
+    def getBandwidths(self, device_type="tx"):
+        """
+        Returns a list of the bandwidths for each type of device in the scene
+
+        Args:
+            device_type (str): The type of device you want to get the bandwidths of, either "tx" or "rx", default "tx"
+
+        Return:
+            np.array(float): The bandwidths for each transmitter currently in the scene, shape=(num_tx)
+        """
+        rtn = []
+        iterable = self.scene.transmitters if device_type == "tx" else self.scene.receivers
+        for device in iterable:
+            if device.startswith("uav"):
+                rtn.append(self.uavs[int(device[3:])].bandwidth)
+            elif device.startswith("gu"):
+                rtn.append(self.gus[int(device[2:])].bandwidth)
+            elif device.startswith("bs"):
+                rtn.append(self.base_stations[int(device[2:])].bandwidth)
+        return np.array(rtn, dtype=np.float64)
+    
+
+    def computeAlpha(self, max_depth=1, num_samples=100000, sampling_frequency=1.0, reverse=False):
         """
         Computes the path coefficients for all paths between each pair of receivers and transmitters
         
@@ -471,7 +494,6 @@ class Environment():
             max_depth (int): the maximum reflection depth computed, 2 is standard
             num_samples (int): the number of points to sample on the fibonacci sphere, 10^4 or 10^5 works well
             sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
-            time_steps (int): The number of time steps simulated, default 1
             reverse (bool): Whether to reverse the direction of the channel impulse response, default False
             
         Returns:
@@ -480,10 +502,45 @@ class Environment():
         dr.flush_malloc_cache()
 
         paths = self.computeGeneralPaths(max_depth, num_samples)
-        print(paths.a)
-        a, tau = paths.cir(sampling_frequency=sampling_frequency, num_time_steps=time_steps, reverse_direction=reverse)
-        return np.array(a).squeeze().astype(np.float64)
+        a = paths.cir(sampling_frequency=sampling_frequency, num_time_steps=1, reverse_direction=reverse)
+        a = np.array(a[0]).squeeze()
 
+        return (a[0] + 1j * a[1]).astype(np.complex64)
+    
+
+    def computeSNR(self, paths, sampling_frequency=1.0, reverse=False):
+        """
+        Computes the SNR values between each pair of receivers and transmitters along the
+        provided paths. Uses maximum-ratio combining to calculate signal power, and uses
+        ambient noise power
+
+        Args:
+            paths (sionna.rt.Paths): The paths object to calculate the SNR of
+            sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
+            reverse (bool): Whether to reverse the direction of the channel impulse response, default False
+
+        Return:
+            (np.array(float)): The SNR values between transmitters and receivers, shape=(num_rx, num_tx)
+        """
+        # Computing the path coefficients
+        a = paths.cir(sampling_frequency=sampling_frequency, num_time_steps=1, reverse_direction=reverse)[0]
+        a_real = np.array(a[0]).squeeze().astype(np.float64)
+        a_complex = np.array(a[1]).squeeze().astype(np.float64)
+
+        # Getting bandwidths -> noise power
+        bandwidth = np.reshape(self.getBandwidths(device_type="tx"), (1, self.n_tx, 1))
+        noise_power = np.broadcast_to(bandwidth, a_real.shape) * self.temperature * BOLTZMANN_CONSTANT
+
+        # TODO: Get signal power from each transmitter
+
+
+        # Summing through the num_paths dimension (2)
+        signal_power = a_real * a_real + a_complex * a_complex  # Effectively multiplying by the conjugate, maximum-ratio combining
+        signal_power = np.sum(signal_power, axis=2)
+        noise_power = np.sum(noise_power, axis=2)
+
+        return np.maximum(20 * np.log10(signal_power / noise_power), 0)
+    
 
     def computeLOSPaths(self, mode='gpu'):
         """
@@ -581,7 +638,7 @@ class Environment():
                       diffuse_reflection=True, refraction=True)
 
 
-    def computeGeneralDataRate(self, max_depth=2, num_samples=100000, sampling_frequency=1.0, time_steps=1, reverse=False):
+    def computeGeneralDataRate(self, max_depth=2, num_samples=100000, sampling_frequency=1.0, reverse=False):
         """
         Computes the average theoretical maximum data rate for all different types of paths, including
         line-of-sight, reflection, diffraction, and scattering for each transmitter. A
@@ -593,7 +650,6 @@ class Environment():
             num_samples (int): the number of sample points to take from the
             fiboncci sphere, usually about 10^4 or 10^5
             sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
-            time_steps (int): The number of time steps simulated, default 1
             reverse (bool): Whether to reverse the direction of the channel impulse response, default False
         
         Returns:
@@ -602,7 +658,7 @@ class Environment():
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
-        a = np.abs(self.computeAlpha(max_depth, num_samples, sampling_frequency, time_steps, reverse))
+        a = np.abs(self.computeAlpha(max_depth, num_samples, sampling_frequency, reverse))
         bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
         bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
         signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs], dtype=tf.float32)
