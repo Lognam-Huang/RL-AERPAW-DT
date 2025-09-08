@@ -256,7 +256,7 @@ Perhaps the SNR is not dependent on the path itself though and could
 be thought of as constant, as a hyperparameter of the simulation.
 """
 class Environment():
-    def __init__(self, scene_path, position_df_path, desired_throughputs=None, time_step=1, ped_height=1.5, ped_rx=True, ped_color=np.array([0, 1, 0]), wind_vector=np.zeros(3), temperature=290):
+    def __init__(self, scene_path, position_df_path=None, desired_throughputs=None, delta_t=1, ped_height=1.5, ped_rx=True, ped_color=np.array([0, 1, 0]), wind_vector=np.zeros(3), temperature=290):
         """
         Creates a new environment from a scene path and a position_df_path
         This method may take several minutes to run because of the scene creation
@@ -280,7 +280,7 @@ class Environment():
         # Creating the scene and initializing environment variables
         self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
         self.ped_rx = ped_rx
-        self.time_step = time_step
+        self.delta_t = delta_t
         self.cur_step = 0
         self.ped_height = ped_height
         self.ped_color = ped_color  # The default is green like in the Sionna visualizations
@@ -289,16 +289,23 @@ class Environment():
         self.n_bs = 0
         self.uavs = []
         self.base_stations = []
-        self.gus = self.createGroundUsers(position_df_path, desired_throughputs)
+        if position_df_path is not None:
+            self.gus = self.createGroundUsers(position_df_path, desired_throughputs)
+        else:
+            self.gus = []
         self.temperature = temperature
         self.wind = wind_vector
         # This is used to speed up computation later in the simulation
         self.bezier_matrix = np.linalg.inv(np.array([
             [1, 0, 0, 0], 
             [-3, 3, 0, 0], 
-            [(1 - self.time_step) ** 3, 3 * self.time_step * (1 - self.time_step) ** 2, 3 * self.time_step ** 2 * (1 - self.time_step), self.time_step ** 3], 
-            [-3 * (1 - self.time_step) ** 2, -6 * self.time_step * (1 - self.time_step) + 3 * (1 - self.time_step) ** 2, -3 * self.time_step ** 2 + 6 * self.time_step * (1 - self.time_step), 3 * self.time_step ** 2]
+            [(1 - self.delta_t) ** 3, 3 * self.delta_t * (1 - self.delta_t) ** 2, 3 * self.delta_t ** 2 * (1 - self.delta_t), self.delta_t ** 3], 
+            [-3 * (1 - self.delta_t) ** 2, -6 * self.delta_t * (1 - self.delta_t) + 3 * (1 - self.delta_t) ** 2, -3 * self.delta_t ** 2 + 6 * self.delta_t * (1 - self.delta_t), 3 * self.delta_t ** 2]
         ]))
+
+        # Configuring default antenna patterns
+        self.setReceiverArray()
+        self.setTransmitterArray()
 
 
     def createGroundUsers(self, position_df_path, desired_throughputs=None):
@@ -327,11 +334,11 @@ class Environment():
             if desired_throughputs is None:
                 rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
                                       self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
-                                      delta_t=self.time_step, color=self.ped_color))
+                                      delta_t=self.delta_t, color=self.ped_color))
             else:
                 rtn.append(GroundUser(j, np.array([res[j]["local_person_x"], res[j]["local_person_y"], np.full(len(res[j]), 
                                       self.ped_height)]).T, height=self.ped_height, com_type=("rx" if self.ped_rx else "tx"), 
-                                      delta_t=self.time_step, color=self.ped_color, desired_throughputs=desired_throughputs[j]))
+                                      delta_t=self.delta_t, color=self.ped_color, desired_throughputs=desired_throughputs[j]))
             if self.ped_rx:
                 self.n_rx += 1
             else:
@@ -456,29 +463,26 @@ class Environment():
         return np.array(rtn)
     
 
-    def computeAlpha(self, max_depth, num_samples):
+    def computeAlpha(self, max_depth=1, num_samples=100000, sampling_frequency=1.0, time_steps=1, reverse=False):
         """
         Computes the path coefficients for all paths between each pair of receivers and transmitters
         
         Args:
             max_depth (int): the maximum reflection depth computed, 2 is standard
             num_samples (int): the number of points to sample on the fibonacci sphere, 10^4 or 10^5 works well
-
+            sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
+            time_steps (int): The number of time steps simulated, default 1
+            reverse (bool): Whether to reverse the direction of the channel impulse response, default False
+            
         Returns:
             tf.tensor(num_rx, num_tx, max_num_paths): The channel impulse responses for each receiver and transmitter pair
         """
+        dr.flush_malloc_cache()
 
         paths = self.computeGeneralPaths(max_depth, num_samples)
-
-        # Check the sampling frequency parameter for the doppler shift
-        if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs]), np.array([x.getVelocity() for x in self.gus]))
-        else:
-            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs]))
-        
-        a, tau = paths.cir(los=True, reflection=True, diffraction=True, scattering=True, ris=False)
-
-        return tf.squeeze(a).numpy().astype(np.float64)
+        print(paths.a)
+        a, tau = paths.cir(sampling_frequency=sampling_frequency, num_time_steps=time_steps, reverse_direction=reverse)
+        return np.array(a).squeeze().astype(np.float64)
 
 
     def computeLOSPaths(self, mode='gpu'):
@@ -577,7 +581,7 @@ class Environment():
                       diffuse_reflection=True, refraction=True)
 
 
-    def computeGeneralDataRate(self, max_depth, num_samples):
+    def computeGeneralDataRate(self, max_depth=2, num_samples=100000, sampling_frequency=1.0, time_steps=1, reverse=False):
         """
         Computes the average theoretical maximum data rate for all different types of paths, including
         line-of-sight, reflection, diffraction, and scattering for each transmitter. A
@@ -588,25 +592,17 @@ class Environment():
             max_depth (int): the maximum reflection depth usually 2-3 works well
             num_samples (int): the number of sample points to take from the
             fiboncci sphere, usually about 10^4 or 10^5
+            sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
+            time_steps (int): The number of time steps simulated, default 1
+            reverse (bool): Whether to reverse the direction of the channel impulse response, default False
         
         Returns:
             np.array(num_rx, num_tx): The theoretical maximum data rate of all possible paths for each transmitter
         """
-
-        paths = self.computeGeneralPaths(max_depth, num_samples)
-
-        # Check the sampling frequency parameter for the doppler shift
-        if self.ped_rx:
-            paths.apply_doppler(0.0001, 1, np.array([x.vel + self.wind for x in self.uavs]), np.array([x.getVelocity() for x in self.gus]))
-        else:
-            paths.apply_doppler(0.0001, 1, np.array([x.getVelocity() for x in self.gus]), np.array([x.vel + self.wind for x in self.uavs]))
-        
-        a, tau = paths.cir(sampling_frequency=1.0, num_time_steps=num_samples, normalize_delays=False, reverse_direction=False, out_type='tf')
-        
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
         # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
-        a = np.abs(tf.squeeze(a))
+        a = np.abs(self.computeAlpha(max_depth, num_samples, sampling_frequency, time_steps, reverse))
         bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
         bandwidth = tf.broadcast_to(tf.reshape(bandwidth, [1, -1, 1]), [self.n_rx, self.n_tx, tf.shape(a)[2]])
         signal_power = tf.convert_to_tensor([uav.signal_power for uav in self.uavs], dtype=tf.float32)
@@ -615,11 +611,13 @@ class Environment():
         return tf.math.reduce_sum(bandwidth * np.log2(1 + (signal_power * a ** 2) / (BOLTZMANN_CONSTANT * self.temperature * bandwidth)), axis=2).numpy().astype(np.float64)
     
 
-    def addUAV(self, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.array([1, 0, 0]), bandwidth=50, rotor_area=None, signal_power=0, throughput_capacity=625000000, battery_capacity=10000):
+    def addUAV(self, device_type=None, mass=1, efficiency=0.8, pos=np.zeros(3), vel=np.zeros(3), color=np.array([1, 0, 0]), bandwidth=50, rotor_area=None, signal_power=1, throughput_capacity=625000000, battery_capacity=10000):
         """
         Adds a UAV to the environment and initalizes its quantities and receiver / transmitter
 
         Args:
+            device_type (str): The type of radio device associated with the UAV, either "tx", "rx", or None.
+            If None, the ped_rx flag is used determine it, default None
             mass (float): the mass of the UAV in kilograms
             efficiency (float): the proportion of the UAV's power consumption that is turned into movement
             pos (np.array(3,)): the initial position of the UAV
@@ -637,11 +635,12 @@ class Environment():
 
         id = self.n_tx if self.ped_rx else self.n_rx
         if rotor_area is None:
-            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, mass * 0.3, signal_power, throughput_capacity, battery_capacity))
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.delta_t, mass * 0.3, signal_power, throughput_capacity, battery_capacity))
         else:
-            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.time_step, rotor_area, signal_power, throughput_capacity, battery_capacity))
+            self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.delta_t, rotor_area, signal_power, throughput_capacity, battery_capacity))
 
-        if self.ped_rx:
+        tx = self.ped_rx if device_type is None else device_type == "tx"  # Boolean flag if the UAV is a transmitter
+        if tx:
             self.uavs[id].device = Transmitter(name=f"uav{id}", position=mi.Point3f(pos), color=color)
             self.n_tx += 1
         else:
@@ -671,7 +670,7 @@ class Environment():
         assert device_type in ["rx", "tx"]
 
         id = self.n_bs
-        self.base_stations.append(BaseStation(id, pos, bandwidth, self.time_step, signal_power, throughput_capacity, battery_capacity))
+        self.base_stations.append(BaseStation(id, pos, bandwidth, self.delta_t, signal_power, throughput_capacity, battery_capacity))
         if device_type == "tx":
             self.base_stations[id].device = Transmitter(name=f"bs{id}", position=mi.Point3f(pos), color=color)
         else:
@@ -858,7 +857,7 @@ class Environment():
 
         rtn = []
         for i in range(samples):
-            t = self.time_step * i / samples
+            t = self.delta_t * i / samples
             # Add the value of the parametric curve at time t
             rtn.append(((1 - t) ** 3) * b[0] + 3 * t * ((1 - t) ** 2) * b[1] + 3 * (t ** 2) * (1 - t) * b[2] + (t ** 3) * b[3])
 
@@ -1224,6 +1223,7 @@ class Environment():
         n = len(self.uavs)
         m = len(landmarks)
 
+        # Computing distances
         assert n == m
         D = np.zeros((n, m))
         for i in range(n):
@@ -1454,9 +1454,11 @@ class GroundUser():
         self.delta_t = delta_t
         self.desired_throughputs = desired_throughputs
         if com_type == "tx":
-            self.device = Transmitter(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
+            self.com_type = "tx"
+            self.device = Transmitter(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), float(height)]), color=color)
         elif com_type == "rx":
-            self.device = Receiver(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), height]), color=color)
+            self.com_type = "rx"
+            self.device = Receiver(name=f"gu{id}", position=mi.Point3f([float(self.positions[0][0]), float(self.positions[0][1]), float(height)]), color=color)
         else:
             raise ValueError("com_type must be either 'tx' or 'rx'")
     
@@ -1520,4 +1522,17 @@ class GroundUser():
             float: the desired throughput of the Ground User, in bytes per second rounded to the nearest integer
         """
         return self.desired_throughputs[self.time_step]
+    
+
+    def lookAt(self, position=None):
+        """
+        Adjusts the position of the antenna to look at a specific point, default is straight down towards the ground
+
+        Args:
+            position (np.array(float)): The position to point the UAV's antenna at
+        """
+
+        if position is None:
+            position = self.positions[self.time_step] + np.array([0, 0, 1])  # A point just above the Ground User
+        self.device.look_at(position)
     
