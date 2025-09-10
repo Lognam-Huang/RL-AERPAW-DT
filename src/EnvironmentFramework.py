@@ -748,8 +748,10 @@ class Environment():
         self.base_stations.append(BaseStation(id, pos, bandwidth, self.delta_t, signal_power, throughput_capacity, battery_capacity))
         if device_type == "tx":
             self.base_stations[id].device = Transmitter(name=f"bs{id}", position=mi.Point3f(pos), color=color)
+            self.n_tx += 1
         else:
             self.base_stations[id].device = Receiver(name=f"bs{id}", position=mi.Point3f(pos), color=color)
+            self.n_rx += 1
         self.n_bs += 1
         
         self.base_stations[id].lookAt()  # Pointing the Base Station at the ground to start

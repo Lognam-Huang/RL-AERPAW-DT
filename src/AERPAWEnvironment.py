@@ -65,7 +65,7 @@ class AERPAWEnv(Environment):
             temperature (float): The temperature of the ambient environment in Kelvin, used
             for path loss calculation, default 290 Kelvin (17 C, 62 F)
         """
-        # Configuring scene
+        # Substituting default scene
         if scene_path is None:
             scene_path = sionna.rt.scene.simple_reflector
 
@@ -120,8 +120,35 @@ class AERPAWEnv(Environment):
                     battery_capacity=bs_config.get("battery_capacity", 10000))
 
 
-    def getSINR(self):
+    def getSNR(self, max_depth=2, num_samples=1000000, sampling_frequency=1.0, mode="gpu", los=False, reverse=False):
         """
         Returns a dictionary of the SINR values between all pairs of transmitters and receivers
+        
+        Args:
+            max_depth (int): The maximum number of reflections to consider while ray tracing, ignored if los is True, default 2
+            num_samples (int): The number of sample rays to compute when ray tracing, ignored if los is True, default 1,000,000
+            sampling_frequency (float): The frequency at which the channel impulse response is sampled at in Hz, default 1.0
+            mode (str): The type of processor to use for ray tracing, either "cpu" or "gpu", default "gpu"
+            los (bool): If you just want to compute the SNR over Line-of-Sight paths, default False
+            reverse (bool): If you want to ray trace from recievers to transmitters, default False
+
+
+
+        Return:
+            (dict(dict(float))): A dictionary mapping all transmitters to a dictionary of SNR values for each receiver
         """
-        return None
+        # Generating dictionary from array
+        tx_names = [tx for tx in self.scene.transmitters]
+        rx_names = [rx for rx in self.scene.receivers]
+
+        paths = self.computeLOSPaths(mode) if los else self.computeGeneralPaths(max_depth, num_samples, mode)
+        snr = self.computeSNR(paths, sampling_frequency, reverse)
+
+        rtn = {}
+        for i in range(self.n_rx):
+            row = {}
+            for j in range(self.n_tx):
+                row[tx_names[j]] = snr[i][j]
+            rtn[rx_names[i]] = row
+        
+        return rtn
