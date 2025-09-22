@@ -1,0 +1,213 @@
+<scene version="2.1.0">
+
+<!-- Defaults, these can be set via the command line: -Darg=value -->
+
+
+<!-- Camera and Rendering Parameters -->
+
+	<integrator type="path" id="elm__0" name="elm__0">
+		<integer name="max_depth" value="12"/>
+	</integrator>
+
+<!-- Materials -->
+
+	<bsdf type="diffuse" id="mat-wall" name="mat-wall">
+		<rgb value="1.000000 0.500000 0.200000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roof" name="mat-roof">
+		<rgb value="0.290000 0.250000 0.210000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-vegetation" name="mat-vegetation">
+		<rgb value="0.007000 0.558000 0.005000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="twosided" id="default-bsdf" name="default-bsdf">
+		<bsdf type="diffuse" name="bsdf"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-areas_pedestrian" name="mat-areas_pedestrian">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_residential" name="mat-roads_residential">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_service" name="mat-roads_service">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_tertiary" name="mat-roads_tertiary">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-water" name="mat-water">
+		<rgb value="0.009000 0.002000 0.800000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_primary" name="mat-roads_primary">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-paths_footway" name="mat-paths_footway">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_track" name="mat-roads_track">
+		<rgb value="0.564712 0.332452 0.066626" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_secondary" name="mat-roads_secondary">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-forest" name="mat-forest">
+		<rgb value="0.020000 0.208000 0.007000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-paths_steps" name="mat-paths_steps">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="mat-roads_unclassified" name="mat-roads_unclassified">
+		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
+	</bsdf>
+
+<!-- Emitters -->
+
+
+<!-- Shapes -->
+
+	<shape type="ply" id="elm__3" name="elm__3">
+		<string name="filename" value="meshes/map_11_osm_buildings-wall.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-wall" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__4" name="elm__4">
+		<string name="filename" value="meshes/map_11_osm_buildings-roof.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-roof" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__6" name="elm__6">
+		<string name="filename" value="meshes/map_11_osm_vegetation.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-vegetation" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__8" name="elm__8">
+		<string name="filename" value="meshes/Terrain_001.ply"/>
+		<ref id="default-bsdf" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__10" name="elm__10">
+		<string name="filename" value="meshes/map_11_osm_areas_pedestrian.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-areas_pedestrian" name="bsdf"/>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_residential" name="mesh-map_11_osm_roads_residential">
+		<shape type="ply" name="map_11_osm_roads_residential">
+			<string name="filename" value="meshes/map_11_osm_roads_residential.ply"/>
+			<ref id="mat-roads_residential" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__13" name="elm__13">
+		<ref id="mesh-map_11_osm_roads_residential" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_service" name="mesh-map_11_osm_roads_service">
+		<shape type="ply" name="map_11_osm_roads_service">
+			<string name="filename" value="meshes/map_11_osm_roads_service.ply"/>
+			<ref id="mat-roads_service" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__16" name="elm__16">
+		<ref id="mesh-map_11_osm_roads_service" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_tertiary" name="mesh-map_11_osm_roads_tertiary">
+		<shape type="ply" name="map_11_osm_roads_tertiary">
+			<string name="filename" value="meshes/map_11_osm_roads_tertiary.ply"/>
+			<ref id="mat-roads_tertiary" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__19" name="elm__19">
+		<ref id="mesh-map_11_osm_roads_tertiary" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="ply" id="elm__21" name="elm__21">
+		<string name="filename" value="meshes/map_11_osm_water.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-water" name="bsdf"/>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_primary" name="mesh-map_11_osm_roads_primary">
+		<shape type="ply" name="map_11_osm_roads_primary">
+			<string name="filename" value="meshes/map_11_osm_roads_primary.ply"/>
+			<ref id="mat-roads_primary" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__24" name="elm__24">
+		<ref id="mesh-map_11_osm_roads_primary" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_paths_footway" name="mesh-map_11_osm_paths_footway">
+		<shape type="ply" name="map_11_osm_paths_footway">
+			<string name="filename" value="meshes/map_11_osm_paths_footway.ply"/>
+			<ref id="mat-paths_footway" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__27" name="elm__27">
+		<ref id="mesh-map_11_osm_paths_footway" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_track" name="mesh-map_11_osm_roads_track">
+		<shape type="ply" name="map_11_osm_roads_track">
+			<string name="filename" value="meshes/map_11_osm_roads_track.ply"/>
+			<ref id="mat-roads_track" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__30" name="elm__30">
+		<ref id="mesh-map_11_osm_roads_track" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_secondary" name="mesh-map_11_osm_roads_secondary">
+		<shape type="ply" name="map_11_osm_roads_secondary">
+			<string name="filename" value="meshes/map_11_osm_roads_secondary.ply"/>
+			<ref id="mat-roads_secondary" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__33" name="elm__33">
+		<ref id="mesh-map_11_osm_roads_secondary" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="ply" id="elm__35" name="elm__35">
+		<string name="filename" value="meshes/map_11_osm_forest.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-forest" name="bsdf"/>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_paths_steps" name="mesh-map_11_osm_paths_steps">
+		<shape type="ply" name="map_11_osm_paths_steps">
+			<string name="filename" value="meshes/map_11_osm_paths_steps.ply"/>
+			<ref id="mat-paths_steps" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__38" name="elm__38">
+		<ref id="mesh-map_11_osm_paths_steps" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_11_osm_roads_unclassified" name="mesh-map_11_osm_roads_unclassified">
+		<shape type="ply" name="map_11_osm_roads_unclassified">
+			<string name="filename" value="meshes/map_11_osm_roads_unclassified.ply"/>
+			<ref id="mat-roads_unclassified" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__41" name="elm__41">
+		<ref id="mesh-map_11_osm_roads_unclassified" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 84.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+
+<!-- Volumes -->
+
+</scene>
