@@ -26,7 +26,7 @@
 		mat-roads_secondary -> itu-concrete
 		mat-forest -> itu-medium_dry_ground 
 		mat-paths_steps -> itu-concrete
-		mat-mat-roads_unclassified -> itu-concrete
+		mat-roads_unclassified -> itu-concrete
 	-->
 
 	<bsdf type="diffuse" id="itu-plywood" name="itu-plywood">

@@ -506,7 +506,8 @@ class Environment():
 
     def computeAlpha(self, max_depth=1, num_samples=100000, sampling_frequency=1.0, reverse=False):
         """
-        Computes the path coefficients for all paths between each pair of receivers and transmitters
+        Computes the path coefficients for
+          all paths between each pair of receivers and transmitters
         
         Args:
             max_depth (int): the maximum reflection depth computed, 2 is standard

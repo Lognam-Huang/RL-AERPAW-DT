@@ -11,35 +11,31 @@
 
 <!-- Materials -->
 
-	<bsdf type="diffuse" id="mat-wall" name="mat-wall">
-		<rgb value="1.000000 0.500000 0.200000" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-roof" name="mat-roof">
+	<!-- Sionna Material Subsitutions:
+	    mat-wall -> itu-concrete
+		mat-roof -> itu-plywood
+		mat-vegetation -> itu-medium_dry_ground
+		mat-roads_residential -> itu-concrete
+		mat-roads_service -> itu-concrete
+		mat-water -> itu-wet_ground
+		mat-roads_primary -> itu-concrete
+		mat-paths_footway -> itu-concrete
+		mat-roads_track -> itu-concrete
+		mat-forest -> itu-medium_dry_ground 
+		mat-paths_steps -> itu-concrete
+	-->
+
+	<bsdf type="diffuse" id="itu-plywood" name="itu-plywood">
 		<rgb value="0.290000 0.250000 0.210000" name="reflectance"/>
 	</bsdf>
-	<bsdf type="diffuse" id="mat-vegetation" name="mat-vegetation">
+	<bsdf type="diffuse" id="itu-medium_dry_ground" name="itu-medium_dry_ground">
 		<rgb value="0.007000 0.558000 0.005000" name="reflectance"/>
 	</bsdf>
 	<bsdf type="twosided" id="default-bsdf" name="default-bsdf">
 		<bsdf type="diffuse" name="bsdf"/>
 	</bsdf>
-	<bsdf type="diffuse" id="mat-roads_residential" name="mat-roads_residential">
-		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-water" name="mat-water">
+	<bsdf type="diffuse" id="itu-wet_ground" name="itu-wet_ground">
 		<rgb value="0.009000 0.002000 0.800000" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-paths_footway" name="mat-paths_footway">
-		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-roads_track" name="mat-roads_track">
-		<rgb value="0.564712 0.332452 0.066626" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-roads_service" name="mat-roads_service">
-		<rgb value="0.086500 0.090842 0.088656" name="reflectance"/>
-	</bsdf>
-	<bsdf type="diffuse" id="mat-forest" name="mat-forest">
-		<rgb value="0.020000 0.208000 0.007000" name="reflectance"/>
 	</bsdf>
 
 <!-- Emitters -->
@@ -50,17 +46,17 @@
 	<shape type="ply" id="mesh-map_15_osm_buildings-wall" name="mesh-map_15_osm_buildings-wall">
 		<string name="filename" value="meshes/map_15_osm_buildings-wall.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-wall" name="bsdf"/>
+		<ref id="itu-concrete" name="bsdf"/>
 	</shape>
 	<shape type="ply" id="mesh-map_15_osm_buildings-roof" name="mesh-map_15_osm_buildings-roof">
 		<string name="filename" value="meshes/map_15_osm_buildings-roof.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-roof" name="bsdf"/>
+		<ref id="itu-plywood" name="bsdf"/>
 	</shape>
 	<shape type="ply" id="mesh-map_15_osm_vegetation" name="mesh-map_15_osm_vegetation">
 		<string name="filename" value="meshes/map_15_osm_vegetation.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-vegetation" name="bsdf"/>
+		<ref id="itu-medium_dry_ground" name="bsdf"/>
 	</shape>
 	<shape type="ply" id="mesh-Terrain" name="mesh-Terrain">
 		<string name="filename" value="meshes/Terrain.ply"/>
@@ -69,7 +65,7 @@
 	<shape type="shapegroup" id="mesh-map_15_osm_roads_residential" name="mesh-map_15_osm_roads_residential">
 		<shape type="ply" name="map_15_osm_roads_residential">
 			<string name="filename" value="meshes/map_15_osm_roads_residential.ply"/>
-			<ref id="mat-roads_residential" name="bsdf"/>
+			<ref id="itu-concrete" name="bsdf"/>
 		</shape>
 	</shape>
 	<shape type="instance" id="elm__11" name="elm__11">
@@ -81,12 +77,12 @@
 	<shape type="ply" id="mesh-map_15_osm_water" name="mesh-map_15_osm_water">
 		<string name="filename" value="meshes/map_15_osm_water.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-water" name="bsdf"/>
+		<ref id="itu-wet_ground" name="bsdf"/>
 	</shape>
 	<shape type="shapegroup" id="mesh-map_15_osm_paths_footway" name="mesh-map_15_osm_paths_footway">
 		<shape type="ply" name="map_15_osm_paths_footway">
 			<string name="filename" value="meshes/map_15_osm_paths_footway.ply"/>
-			<ref id="mat-paths_footway" name="bsdf"/>
+			<ref id="itu-concrete" name="bsdf"/>
 		</shape>
 	</shape>
 	<shape type="instance" id="elm__16" name="elm__16">
@@ -98,7 +94,7 @@
 	<shape type="shapegroup" id="mesh-map_15_osm_roads_track" name="mesh-map_15_osm_roads_track">
 		<shape type="ply" name="map_15_osm_roads_track">
 			<string name="filename" value="meshes/map_15_osm_roads_track.ply"/>
-			<ref id="mat-roads_track" name="bsdf"/>
+			<ref id="itu-concrete" name="bsdf"/>
 		</shape>
 	</shape>
 	<shape type="instance" id="elm__19" name="elm__19">
@@ -110,7 +106,7 @@
 	<shape type="shapegroup" id="mesh-map_15_osm_roads_service" name="mesh-map_15_osm_roads_service">
 		<shape type="ply" name="map_15_osm_roads_service">
 			<string name="filename" value="meshes/map_15_osm_roads_service.ply"/>
-			<ref id="mat-roads_service" name="bsdf"/>
+			<ref id="itu-concrete" name="bsdf"/>
 		</shape>
 	</shape>
 	<shape type="instance" id="elm__22" name="elm__22">
@@ -122,7 +118,7 @@
 	<shape type="ply" id="mesh-map_15_osm_forest" name="mesh-map_15_osm_forest">
 		<string name="filename" value="meshes/map_15_osm_forest.ply"/>
 		<boolean name="face_normals" value="true"/>
-		<ref id="mat-forest" name="bsdf"/>
+		<ref id="itu-medium_dry_ground" name="bsdf"/>
 	</shape>
 
 <!-- Volumes -->
