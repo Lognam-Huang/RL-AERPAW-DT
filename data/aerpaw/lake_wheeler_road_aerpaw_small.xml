@@ -1,0 +1,130 @@
+<scene version="2.1.0">
+
+<!-- Defaults, these can be set via the command line: -Darg=value -->
+
+
+<!-- Camera and Rendering Parameters -->
+
+	<integrator type="path" id="elm__0" name="elm__0">
+		<integer name="max_depth" value="12"/>
+	</integrator>
+
+<!-- Materials -->
+
+	<!-- Sionna Material Subsitutions:
+	    mat-wall -> itu-concrete
+		mat-roof -> itu-plywood
+		mat-vegetation -> itu-medium_dry_ground
+		mat-areas_pedestrian -> itu-concrete
+		mat-roads_residential -> itu-concrete
+		mat-roads_service -> itu-concrete
+		mat-roads_tertiary -> itu-concrete
+		mat-water -> itu-wet_ground
+		mat-roads_primary -> itu-concrete
+		mat-paths_footway -> itu-concrete
+		mat-roads_track -> itu-concrete
+		mat-roads_secondary -> itu-concrete
+		mat-forest -> itu-medium_dry_ground 
+		mat-paths_steps -> itu-concrete
+		mat-mat-roads_unclassified -> itu-concrete
+	-->
+
+	<bsdf type="diffuse" id="itu-plywood" name="itu-plywood">
+		<rgb value="0.290000 0.250000 0.210000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="diffuse" id="itu-medium_dry_ground" name="itu-medium_dry_ground">
+		<rgb value="0.007000 0.558000 0.005000" name="reflectance"/>
+	</bsdf>
+	<bsdf type="twosided" id="default-bsdf" name="default-bsdf">
+		<bsdf type="diffuse" name="bsdf"/>
+	</bsdf>
+	<bsdf type="diffuse" id="itu-wet_ground" name="itu-wet_ground">
+		<rgb value="0.009000 0.002000 0.800000" name="reflectance"/>
+	</bsdf>
+
+<!-- Emitters -->
+
+
+<!-- Shapes -->
+
+	<shape type="ply" id="elm__3" name="elm__3">
+		<string name="filename" value="meshes/map_15_osm_buildings-wall.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-wall" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__4" name="elm__4">
+		<string name="filename" value="meshes/map_15_osm_buildings-roof.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-roof" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__6" name="elm__6">
+		<string name="filename" value="meshes/map_15_osm_vegetation.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-vegetation" name="bsdf"/>
+	</shape>
+	<shape type="ply" id="elm__8" name="elm__8">
+		<string name="filename" value="meshes/Terrain.ply"/>
+		<ref id="default-bsdf" name="bsdf"/>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_15_osm_roads_residential" name="mesh-map_15_osm_roads_residential">
+		<shape type="ply" name="map_15_osm_roads_residential">
+			<string name="filename" value="meshes/map_15_osm_roads_residential.ply"/>
+			<ref id="mat-roads_residential" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__11" name="elm__11">
+		<ref id="mesh-map_15_osm_roads_residential" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 60.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="ply" id="elm__13" name="elm__13">
+		<string name="filename" value="meshes/map_15_osm_water.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-water" name="bsdf"/>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_15_osm_paths_footway" name="mesh-map_15_osm_paths_footway">
+		<shape type="ply" name="map_15_osm_paths_footway">
+			<string name="filename" value="meshes/map_15_osm_paths_footway.ply"/>
+			<ref id="mat-paths_footway" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__16" name="elm__16">
+		<ref id="mesh-map_15_osm_paths_footway" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 60.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_15_osm_roads_track" name="mesh-map_15_osm_roads_track">
+		<shape type="ply" name="map_15_osm_roads_track">
+			<string name="filename" value="meshes/map_15_osm_roads_track.ply"/>
+			<ref id="mat-roads_track" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__19" name="elm__19">
+		<ref id="mesh-map_15_osm_roads_track" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 60.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="shapegroup" id="mesh-map_15_osm_roads_service" name="mesh-map_15_osm_roads_service">
+		<shape type="ply" name="map_15_osm_roads_service">
+			<string name="filename" value="meshes/map_15_osm_roads_service.ply"/>
+			<ref id="mat-roads_service" name="bsdf"/>
+		</shape>
+	</shape>
+	<shape type="instance" id="elm__22" name="elm__22">
+		<ref id="mesh-map_15_osm_roads_service" name="shape"/>
+		<transform name="to_world">
+			<matrix value="0.000000 1.000000 0.000000 0.000000 -1.000000 0.000000 0.000000 0.000000 0.000000 0.000000 1.000000 60.000000 0.000000 0.000000 0.000000 1.000000"/>
+		</transform>
+	</shape>
+	<shape type="ply" id="elm__24" name="elm__24">
+		<string name="filename" value="meshes/map_15_osm_forest.ply"/>
+		<boolean name="face_normals" value="true"/>
+		<ref id="mat-forest" name="bsdf"/>
+	</shape>
+
+<!-- Volumes -->
+
+</scene>
