@@ -486,15 +486,18 @@ class Environment():
         return np.array(rtn, dtype=np.float64)
 
 
-    def getSignalPowers(self):
+    def getSignalPowers(self, device_type="tx"):
         """
         Returns a list of the signal powers for each transmitter in the scene
+
+        Args:
+            device_type (str): The type of device you want to get the signal powers of, either "tx" or "rx", default "tx"
 
         Return:
             np.array(float): The signal powers for each transmitter in the scene, shape=(num_tx)
         """
         rtn = []
-        for tx in self.scene.transmitters:
+        for tx in self.scene.transmitters if device_type == "tx" else self.scene.receivers:
             if tx.startswith("uav"):
                 rtn.append(self.uavs[int(tx[3:])].signal_power)
             elif tx.startswith("gu"):
@@ -543,11 +546,13 @@ class Environment():
         """
         # Computing the path coefficients
         a = paths.cir(sampling_frequency=sampling_frequency, num_time_steps=1, reverse_direction=reverse)[0]
-        a_real = np.array(a[0]).squeeze().astype(np.float64)
-        a_complex = np.array(a[1]).squeeze().astype(np.float64)
+        # Squeezing through the num_antenna dimensions (2) and the num_time_steps dimension
+        a_real = np.array(tf.squeeze(a[0], axis=[1, 3, 5])).astype(np.float64)
+        a_complex = np.array(tf.squeeze(a[1], axis=[1, 3, 5])).astype(np.float64)
 
         # Getting bandwidths -> noise power
         bandwidth = np.reshape(self.getBandwidths(device_type="tx"), (1, self.n_tx, 1))
+        bandwidth *= 1e6  # Converting from MHz to Hz
         noise_power = np.broadcast_to(bandwidth, a_real.shape) * self.temperature * BOLTZMANN_CONSTANT
 
         # Getting signal power from each transmitter
@@ -559,6 +564,7 @@ class Environment():
         signal_power = np.sum(signal_power, axis=2) * tx_power
         noise_power = np.sum(noise_power, axis=2)
 
+        # Converting to dB and returning
         return 10 * np.log10(signal_power / noise_power)
     
 
@@ -615,7 +621,7 @@ class Environment():
         a, tau = paths.cir(los=True, reflection=False, diffraction=False, scattering=False, ris=False)
         
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
-        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
+        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (MHz), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
         a = tf.squeeze(a)  # TODO: If I only have one User or UAV in the simulation this is going to cause an error
         bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
@@ -676,7 +682,7 @@ class Environment():
             np.array(num_rx, num_tx): The theoretical maximum data rate of all possible paths for each transmitter
         """
         # Computes the sum of the theoetical maximum data rates for each UAV in simulation
-        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (Mbps), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
+        # r_max = Blog2(1 + (Pt * a^2) / kTB); B = bandwidth (MHz), Pt = transmission power (W), a = path coefficients (unitless), k = Boltzmann Constant (J/K), T = temperature (Kelvin)
 
         a = np.abs(self.computeAlpha(max_depth, num_samples, sampling_frequency, reverse))
         bandwidth = tf.convert_to_tensor([uav.bandwidth for uav in self.uavs], dtype=tf.float32)
@@ -699,7 +705,7 @@ class Environment():
             pos (np.array(3,)): the initial position of the UAV
             vel (np.array(3,)): the initial velocity of the UAV2
             color (np.array(3,)): the color of the UAV used for visualization
-            bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
+            bandwidth (float): the bandwidth of the UAV's communication channel, in MHz
             rotor_area (float): the area of the UAV's rotors, in m^2
             signal_power (float): the transmitter/receiver power of the UAV, in watts
             throughput_capacity (float): the maximum throughput of the Base Station in Bytes per second, default 625,000,000
@@ -736,7 +742,7 @@ class Environment():
             pos (np.array(3,)): the initial position of the UAV
             device_type (str): the type of the device associated with the Base Station, either "tx" or "rx" default "tx"
             color (np.array(3,)): the color of the UAV used for visualization
-            bandwidth (float): the bandwidth of the UAV's communication channel, in Mbps
+            bandwidth (float): the bandwidth of the UAV's communication channel, in MHz
             signal_power (float): the transmitter/receiver power of the UAV, in watts
             throughput_capacity (float): the maximum throughput of the Base Station in Bytes per second, default 625,000,000
         
@@ -1340,7 +1346,7 @@ class BaseStation():
         Args:
             id (int): The unique id of the base station
             pos (np.array(float)): The position of the base station in space, shape=(3,)
-            bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
+            bandwidth (float): the bandwidth of the UAV's communication system, in MHz
             delta_t (float): The time between simulation timesteps, in seconds
             throughput_capacity (int): the throughput capacity of the UAV in bytes per second rounded to the nearest integer, default 625,000,000 bytes per second
             battery_capacity (float): the battery capacity of the UAV, in joules, defaults to 10,000 J
@@ -1396,7 +1402,7 @@ class UAV(BaseStation):
             efficiency (float): the proportion of the UAV's power consumption that is turned into movement
             pos (np.array(3,)): the initial position of the UAV
             vel (np.array(3,)): the initial velocity of the UAV
-            bandwidth (float): the bandwidth of the UAV's communication system, in Mbps
+            bandwidth (float): the bandwidth of the UAV's communication system, in MHz
             delta_t (float): The time between simulation timesteps, in seconds
             rotor_area (float): the total area of the UAV's rotors, in square meters
             signal_power (float): the transmitter/receiver power of the UAV, in watts
@@ -1411,6 +1417,7 @@ class UAV(BaseStation):
         self.efficiency = efficiency
         self.vel = vel
         self.rotor_area = rotor_area
+        self.consumption = 0
         
     
     def p(self, t, bezier):
@@ -1495,7 +1502,7 @@ class UAV(BaseStation):
         """
 
         # Computing the bezier
-        f = np.array([super.pos, self.vel, new_pos, new_vel])
+        f = np.array([self.pos, self.vel, new_pos, new_vel])
         bezier = np.dot(bezier_matrix, f)
 
         # Updating consumption
@@ -1516,12 +1523,12 @@ class GroundUser():
             positions (np.array(*, 3)): an array of positions over time on the xy plane
             initial_velocity (float): the velocity of the ground user at time zero
             height (float): the height of the ground user in meters
-            bandwidth (float): the bandwidth of the ground user's device, in Mbps
+            bandwidth (float): the bandwidth of the ground user's device, in MHz
             com_type (str): either "transmitter" or "receiver" denotes the type of the ground user
             delta_t (float): the absolute time between each time step, in seconds
             color (np.array(3,)): the color of the UAV displayed in the visualize function, expressed as RGB values in [0, 1]
             desired_throughputs (np.array(int)): the desired throughput of the ground user at each time step, in bytes per second rounded to the nearest integer
-            defaults to 375000 bytes per second, or 3 Mbps
+            defaults to 375000 bytes per second, or 3 MHz
         """
         self.id = id
         self.positions = positions

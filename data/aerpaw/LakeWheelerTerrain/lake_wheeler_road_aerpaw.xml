@@ -34,7 +34,7 @@
 
 	<shape type="ply" id="elm__2" name="elm__2">
 		<string name="filename" value="meshes/Terrain.ply"/>
-		<ref id="itu-medium_dry_ground" name="bsdf"/>
+		<ref id="mat-itu_medium_dry_ground" name="bsdf"/>
 	</shape>
 
 <!-- Volumes -->
