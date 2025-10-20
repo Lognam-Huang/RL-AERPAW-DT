@@ -276,7 +276,7 @@ class Environment():
         # Registering custom materials with Mitsuba
         mi.register_bsdf("diffuse", lambda props: CustomRadioMaterial(props=props))
         mi.register_bsdf("twosided", lambda props: CustomRadioMaterial(props=props))
-        mi.register_bsdf("principle", lambda props: CustomRadioMaterial(props=props))
+        mi.register_bsdf("principled", lambda props: CustomRadioMaterial(props=props))
 
         # Creating the scene and initializing environment variables
         self.scene = sionna.rt.load_scene(scene_path, merge_shapes=False)
@@ -715,7 +715,12 @@ class Environment():
             (int) the id of the created UAV
         """
 
-        id = self.n_tx if self.ped_rx else self.n_rx
+        # Setting the id
+        if device_type is not None:
+            id = self.n_tx if device_type == "tx" else self.n_rx
+        else:
+            id = self.n_tx if self.ped_rx else self.n_rx
+
         if rotor_area is None:
             self.uavs.append(UAV(id, mass, efficiency, pos, vel - self.wind, bandwidth, self.delta_t, mass * 0.3, signal_power, throughput_capacity, battery_capacity))
         else:
