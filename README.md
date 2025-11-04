@@ -5,6 +5,10 @@
 ![A research poster updated on March 18th, 2025](presentations/research_poster_final_img.jpg)
 This research poster was presented at the Goodnight Research Symposium at NC State.
 
+## Comparison to Existing AERPAW Path Loss Model
+![UAV Trajectory](SNR-Model-Validation/aerpaw/assets/LakeWheelerExperimentMap.png)
+This sample experiment in the AERPAW Platform shows a UAV trajectory in red, as it communicates with Lake Wheeler Node 1 (LW1) in green. In the triangular Non-LoS Zone, the UAV doesn't have a line-of-sight path to LW1.
+
 ## Digital Twin Demonstrations
 The three GIFs below show the evolution of the digital twin environment of Raleigh City downtown area, including
 * (Top) Network coverage map with Ground Users (GUs) color-coded based on their Unmanned Aerial Vehicles (UAV) assignments;
