@@ -5,6 +5,20 @@
 ![A research poster updated on March 18th, 2025](presentations/research_poster_final_img.jpg)
 This research poster was presented at the Goodnight Research Symposium at NC State.
 
+## Comparison to Existing AERPAW Path Loss Model
+![UAV Trajectory](SNR-Model-Validation/aerpaw/assets/LakeWheelerExperimentMap.png)
+### Figure 1: Sample Experiment Trajectory in the AERPAW Environment
+* The UAV trajectory is shown in red as it communicates with LW1 shown in green
+* In the triangular Non-LoS Zone, the UAV doens't have a line-of-sight path to LW1
+
+![AERPAW vs Ray-Tracing Model SNR](SNR-Model-Validation/aerpaw/assets/SNR-Comparison.png)
+### Figure 2: AERPAW and Ray-Tracing Model SNR vs. Time for sample experiment
+* The yellow line shows AERPAW's SNR result between LW1 and the UAV at each second, which includes random noise
+* The green line shows RL-AERPAW-DT's Ray-Tracing SNR result over the same experiment
+* The red lines mark the beginning and end of the Non-LoS Zone, where there is no LoS path to LW1
+
+Importantly, both models given similar SNR values when there is a LoS path, but our ray-tracing-based model predicts much lower SNR for the non-LoS zone. Figure 2 shows how the ray-tracing model includes more environmental information to make more accurate predictions about realistic SNR values.
+
 ## Digital Twin Demonstrations
 The three GIFs below show the evolution of the digital twin environment of Raleigh City downtown area, including
 * (Top) Network coverage map with Ground Users (GUs) color-coded based on their Unmanned Aerial Vehicles (UAV) assignments;
